@@ -1,0 +1,10 @@
+# The paper-trading simulation runs on the Python standard library alone.
+# The packages below are OPTIONAL and only needed for the live-data / live-trade
+# paths (which remain disabled in this phase). Pin exact versions before use.
+
+# --- Live market data & (future) execution ---
+# requests>=2.31,<3            # HTTP client for Polymarket public APIs
+# py-clob-client>=0.19,<1      # Official Polymarket CLOB client (Phase 3+)
+
+# --- Development / testing ---
+# pytest>=8,<9                 # optional; stdlib unittest also works

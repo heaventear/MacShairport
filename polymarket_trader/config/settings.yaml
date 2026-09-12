@@ -1,0 +1,76 @@
+# =============================================================================
+# Immutable trading configuration.
+#
+# These are the risk and strategy parameters described in the project spec.
+# They are loaded once at startup into a frozen config object. The AI engine
+# is NEVER given a handle to mutate them (设计原则 #5). Changing them requires
+# a human editing this file and restarting the system.
+#
+# NOTE: parsed by polytrader.config with a tiny built-in YAML subset reader,
+# so keep it to simple key: value / nested maps / inline lists.
+# =============================================================================
+
+account:
+  # Total experiment capital in USD-equivalent (see README re: pUSD vs USDT).
+  total_capital_usd: 1000.0
+  # Minimum cash buffer that must always remain uninvested (保留现金缓冲).
+  cash_buffer_usd: 200.0
+
+# ------------------------------- Strategy ------------------------------------
+strategy:
+  # Minimum net edge (after fees/slippage/exit cost) required to consider a
+  # trade, by market liquidity tier. See 交易触发条件 / 建议的最低优势.
+  min_edge_high_liquidity: 0.06      # 6 percentage points
+  min_edge_normal: 0.09              # 8-10 pp; use 9 as the default
+  # Predictions below this confidence are never traded (低置信度预测不允许交易).
+  min_confidence: 0.60
+  # Fraction of a target position filled per child order (拆成 2-3 个小订单).
+  child_order_count: 3
+  # Abort execution if price drifts beyond this from the planned price.
+  max_price_drift: 0.02
+  # Limit orders expire after this many seconds (订单必须设置过期时间).
+  order_ttl_seconds: 120
+
+# ------------------------------ Cost model -----------------------------------
+costs:
+  # Polymarket has historically charged 0% trading fees on the CLOB; we keep a
+  # conservative non-zero assumption so the strategy must overcome real cost.
+  taker_fee_rate: 0.00
+  maker_fee_rate: 0.00
+  # Modelled slippage as a fraction of price, scaled by size vs book depth.
+  base_slippage: 0.005
+  # Assumed cost to exit a position before resolution (退出成本).
+  exit_cost: 0.01
+
+# ---------------------------- Market selection -------------------------------
+selection:
+  min_liquidity_usd: 5000.0          # 流动性足够
+  min_book_depth_usd: 200.0          # 买卖盘深度足够 (top-of-book each side)
+  max_spread: 0.03                   # 买卖价差较小 (3 cents)
+  min_price: 0.05                    # 价格不会因极低流动性失真
+  max_price: 0.95
+  max_days_to_resolution: 30         # 七天内结算或可提前退出
+  require_order_book: true           # 已启用订单簿
+
+# --------------------------- Position sizing ---------------------------------
+# All values in USD-equivalent. See 资金和风险控制.
+sizing:
+  max_per_market: 50.0               # 单个市场最大投入
+  max_per_order: 20.0                # 单笔订单最大投入
+  max_per_event: 80.0                # 单个事件相关市场总投入
+  max_total_open: 300.0              # 所有未结算仓位总投入
+
+# ------------------------- Circuit breakers ---------------------------------
+# Global kill-switches. See 全局熔断规则.
+circuit_breakers:
+  daily_loss_halt_pct: 0.02          # 单日亏损 2% 停止开新仓
+  drawdown_halve_pct: 0.05           # 累计回撤 5% 新仓位减半
+  drawdown_halt_pct: 0.08            # 累计回撤 8% 停止自动交易
+  max_reconcile_diff_usd: 0.50       # 账实不一致阈值 -> 立即暂停
+  api_error_streak_halt: 3           # API 连续异常 -> 只读模式
+
+# ------------------------------ Execution ------------------------------------
+execution:
+  # HARD SAFETY GATE. Must be exactly "simulation" for this phase.
+  # Any other value requires code changes in a later phase AND out-of-band keys.
+  mode: simulation
