@@ -17,6 +17,7 @@ import random
 import time
 
 from .ai import HeuristicProbabilityEngine, ProbabilityEngine
+from .alerts import AlertManager, ConsoleAlertSink
 from .config import Config, load_config
 from .edge import compute_edge
 from .market_data import MarketDataService, OfflineDataSource
@@ -24,6 +25,7 @@ from .market_data.client import DataSource
 from .models import Outcome, Side
 from .orders import OrderManager, SimulationExecutor
 from .portfolio import PortfolioManager
+from .reconcile import LocalPortfolioSource, Reconciler, SimulatedExchangeSource
 from .reporting import (
     DailyReport,
     EngineeringMetrics,
@@ -31,6 +33,7 @@ from .reporting import (
     brier_score,
     calibration_bins,
     compute_trade_metrics,
+    performance_breakdowns,
     render_final_report,
 )
 from .risk import RiskManager
@@ -49,6 +52,7 @@ class SimulationEngine:
         offline_source: OfflineDataSource | None = None,
         seed: int = 123,
         verbose: bool = True,
+        alerts: AlertManager | None = None,
     ):
         self.cfg = cfg
         self.data = data
@@ -60,7 +64,10 @@ class SimulationEngine:
 
         investable = cfg.account.total_capital_usd
         self.portfolio = PortfolioManager(starting_cash=investable)
-        self.risk = RiskManager(cfg)
+        self.alerts = alerts if alerts is not None else AlertManager(
+            sinks=[ConsoleAlertSink()] if verbose else []
+        )
+        self.risk = RiskManager(cfg, on_alert=self._raise_alert)
         self.orders = OrderManager(cfg, SimulationExecutor(cfg), storage)
 
         self.now = time.time()
@@ -79,6 +86,11 @@ class SimulationEngine:
                 self.true_outcome[m.market_id] = self.rng.random() < tp
 
     # ------------------------------------------------------------------ #
+    def _raise_alert(self, severity, kind, message, **ctx) -> None:
+        """Fan an alert to the AlertManager and mirror it into the event log."""
+        self.alerts.alert(severity, kind, message, **ctx)
+        self.storage.log_event(f"alert:{kind}", f"[{severity}] {message}")
+
     def _log(self, msg: str) -> None:
         if self.verbose:
             print(msg)
@@ -244,6 +256,8 @@ class SimulationEngine:
             reason=reason,
             evidence=pred.evidence,
             risk_check=decision.reason,
+            confidence=pred.confidence,
+            topic=(m.tags[0] if m.tags else (m.event_id or "other")),
         )
         self.storage.record_trade(t)
 
@@ -296,14 +310,24 @@ class SimulationEngine:
 
     # ------------------------------------------------------------------ #
     def _daily_reconcile(self, day: int) -> None:
-        # In simulation the "external" ledger equals our own bookkeeping, so this
-        # always reconciles. On live data it would compare against the exchange.
-        local_cash = self.portfolio.cash
-        consistent = self.storage.record_reconciliation(
-            day, "cash", local_cash, local_cash,
-            self.cfg.circuit_breakers.max_reconcile_diff_usd,
-        )
-        self.risk.on_reconciliation(consistent, "cash")
+        # Reconcile the local ledger against external source views. In simulation
+        # the exchange source mirrors local bookkeeping (always consistent); real
+        # Polymarket-API and on-chain sources plug into the same Reconciler.
+        reconciler = Reconciler(cash_tol=self.cfg.circuit_breakers.max_reconcile_diff_usd)
+        local = LocalPortfolioSource(self.portfolio).view()
+        externals = [SimulatedExchangeSource(self.portfolio, name="exchange").view()]
+        report = reconciler.reconcile(local, externals)
+        for e in report.entries:
+            self.storage.record_reconciliation(
+                day, f"{e.source}:{e.field}", e.local, e.external,
+                self.cfg.circuit_breakers.max_reconcile_diff_usd,
+            )
+        if not report.consistent:
+            for e in report.mismatches():
+                self._raise_alert("CRITICAL", "reconciliation_mismatch",
+                                  f"{e.source} {e.field}: local={e.local} "
+                                  f"external={e.external}")
+        self.risk.on_reconciliation(report.consistent, "ledger")
 
     def _print_daily(self, day, equity, marks, markets_by_id) -> None:
         drawdown = (self.risk.peak_equity - equity) / self.risk.peak_equity \
@@ -370,6 +394,7 @@ class SimulationEngine:
             days=days, start_equity=start_equity, end_equity=end_equity,
             max_drawdown_pct=self.max_drawdown, trade_metrics=tm, brier=brier,
             calibration=calib, engineering=eng, success_criteria=success,
+            breakdowns=performance_breakdowns(trades),
         )
         # The final report is the deliverable; the runner always prints it
         # (``--quiet`` only suppresses the per-day reports).

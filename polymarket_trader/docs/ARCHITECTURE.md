@@ -63,9 +63,10 @@ in the SQLite `events` table with a reason, so each decision is auditable.
 |---------------------------------------------|----------------------------|
 | AI only proposes (#1)                       | `ai/engine.py` returns a `Prediction`; it never calls the Order Manager or Portfolio. |
 | Risk Manager can veto (#2)                  | `engine_loop` calls `risk.approve_order` before any order is built. |
-| AI cannot touch keys (#4)                   | No key material anywhere in this phase; `LiveExecutor` is inert. |
+| AI cannot touch keys (#4)                   | No key material anywhere in this phase; signing is delegated to `security.Signer` (default `NoSigner` fails closed); `LiveExecutor` is inert. |
 | AI cannot change risk params (#5)           | `Config` is a frozen dataclass; the engine is never handed a reference. |
 | No leverage (#6)                            | Sizing is bounded by cash minus buffer; no borrow path exists. |
+| Never bypass geoblock (#7)                  | `security.check_geoblock` fails closed — no code path turns a block into an allow. |
 | Simulate first (#8)                         | `execution.mode` must be `simulation`; the runner refuses otherwise. |
 | Every trade traceable (#9)                  | `storage.py` persists predictions, orders, fills, events, reconciliations. |
 

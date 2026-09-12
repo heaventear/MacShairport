@@ -264,7 +264,27 @@ function viewOverview(d){
     </div>
     <div class="panel"><h2>AI probability calibration</h2><div class="kv">${calibRows}</div>
       <div class="note">Buckets predicted probability vs. how often those outcomes actually occurred.</div>
-    </div>`;
+    </div>
+    ${viewBreakdowns(s.breakdowns)}`;
+}
+
+function breakdownTable(title, rows){
+  if(!rows || !rows.length) return `<div class="panel"><h2>${title}</h2><div class="empty">No trades yet.</div></div>`;
+  const body = rows.map(r => `<tr>
+    <td class="l">${esc(r.key)}</td><td>${r.count}</td><td>${r.settled}</td>
+    <td>${r.win_rate==null?"—":fmtPct(r.win_rate)}</td>
+    <td class="${cls(r.net_pnl)}">${r.net_pnl?fmtMoney(r.net_pnl):"—"}</td>
+    <td class="${cls(r.avg_pnl)}">${r.avg_pnl==null?"—":fmtMoney(r.avg_pnl)}</td></tr>`).join("");
+  return `<div class="panel tablescroll"><h2>${title}</h2><table>
+    <thead><tr><th class="l">Group</th><th>Trades</th><th>Settled</th><th>Win rate</th><th>Net PnL</th><th>Avg PnL</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+
+function viewBreakdowns(b){
+  if(!b) return "";
+  return breakdownTable("Performance by market topic", b.by_topic)
+    + breakdownTable("Performance by AI confidence", b.by_confidence)
+    + breakdownTable("Performance: evidence vs. none", b.by_evidence);
 }
 
 function viewTrades(rows){

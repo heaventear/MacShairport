@@ -2,6 +2,7 @@ import unittest
 
 from polytrader.reporting import (
     PredictionOutcome, brier_score, calibration_bins, compute_trade_metrics,
+    performance_breakdowns,
 )
 
 
@@ -42,6 +43,29 @@ class TestReporting(unittest.TestCase):
         self.assertEqual(m.losses, 1)
         self.assertAlmostEqual(m.win_rate, 0.5)
         self.assertEqual(m.anomalous_trades, 1)
+
+    def test_performance_breakdowns(self):
+        trades = [
+            {"topic": "crypto", "confidence": 0.85, "outcome_result": "WON",
+             "pnl": 10.0, "payload": '{"evidence": ["a"]}'},
+            {"topic": "crypto", "confidence": 0.75, "outcome_result": "LOST",
+             "pnl": -20.0, "payload": '{"evidence": ["b"]}'},
+            {"topic": "sports", "confidence": 0.65, "outcome_result": "",
+             "pnl": 0.0, "payload": '{"evidence": []}'},
+        ]
+        b = performance_breakdowns(trades)
+        topics = {g["key"]: g for g in b["by_topic"]}
+        self.assertEqual(topics["crypto"]["count"], 2)
+        self.assertEqual(topics["crypto"]["settled"], 2)
+        self.assertAlmostEqual(topics["crypto"]["win_rate"], 0.5)
+        self.assertAlmostEqual(topics["crypto"]["net_pnl"], -10.0)
+        # sports trade is unsettled -> counted but no win rate.
+        self.assertIsNone(topics["sports"]["win_rate"])
+        conf = {g["key"]: g for g in b["by_confidence"]}
+        self.assertIn("0.80-0.90", conf)
+        ev = {g["key"]: g for g in b["by_evidence"]}
+        self.assertIn("with evidence", ev)
+        self.assertIn("no evidence", ev)
 
 
 if __name__ == "__main__":

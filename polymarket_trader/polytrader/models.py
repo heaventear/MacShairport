@@ -240,6 +240,8 @@ class Trade:
     reason: str
     evidence: list[str]
     risk_check: str          # summary of the risk decision
+    confidence: float = 0.0  # AI self-assessed confidence at decision time
+    topic: str = ""          # market topic/tag for per-theme breakdowns
     outcome_result: str = "" # final settlement result if known
     pnl: float = 0.0
     anomalous: bool = False

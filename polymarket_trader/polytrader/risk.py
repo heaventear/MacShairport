@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Callable
 
 from .config import Config
 
@@ -47,8 +48,11 @@ class PortfolioSnapshot:
 
 
 class RiskManager:
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, on_alert: Callable[..., object] | None = None):
         self.cfg = cfg
+        # Optional alert callback: on_alert(severity, kind, message, **context).
+        # The AI engine is never given this; only the orchestrator wires it.
+        self._on_alert = on_alert
         self.halt_level = HaltLevel.RUNNING
         self.size_multiplier = 1.0
         self.halt_reasons: list[str] = []
@@ -73,6 +77,10 @@ class RiskManager:
             self._escalate(HaltLevel.NO_NEW_POSITIONS,
                            f"drawdown {drawdown:.2%} >= halt {cb.drawdown_halt_pct:.2%}")
         elif drawdown >= cb.drawdown_halve_pct:
+            if self.size_multiplier != 0.5:
+                self._alert("WARNING", "sizing_halved",
+                            f"drawdown {drawdown:.2%} >= halve threshold; sizing halved",
+                            drawdown=round(drawdown, 4))
             self.size_multiplier = 0.5
             self._log(f"drawdown {drawdown:.2%} >= halve threshold; sizing halved")
 
@@ -178,9 +186,20 @@ class RiskManager:
     def _escalate(self, level: HaltLevel, reason: str) -> None:
         order = [HaltLevel.RUNNING, HaltLevel.NO_NEW_POSITIONS,
                  HaltLevel.READ_ONLY, HaltLevel.HARD_HALT]
-        if order.index(level) > order.index(self.halt_level):
+        changed = order.index(level) > order.index(self.halt_level)
+        if changed:
             self.halt_level = level
         self._log(reason)
+        if changed:
+            sev = "CRITICAL" if level == HaltLevel.HARD_HALT else "WARNING"
+            self._alert(sev, "circuit_breaker", reason, new_level=level.value)
+
+    def _alert(self, severity: str, kind: str, message: str, **ctx) -> None:
+        if self._on_alert is not None:
+            try:
+                self._on_alert(severity, kind, message, **ctx)
+            except Exception:  # noqa: BLE001 - alerting must never break risk logic
+                pass
 
     def _log(self, reason: str) -> None:
         self.halt_reasons.append(reason)

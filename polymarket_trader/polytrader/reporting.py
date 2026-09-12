@@ -84,6 +84,68 @@ def compute_trade_metrics(trades: list[dict]) -> TradeMetrics:
     return m
 
 
+def _group_stats(trades: list[dict], keyfn) -> list[dict]:
+    """Aggregate realized trade performance by an arbitrary key.
+
+    Only settled/exited trades (those with an ``outcome_result``) count toward
+    win-rate and PnL; open trades still count toward ``count`` so exposure is
+    visible.
+    """
+    groups: dict[str, dict] = {}
+    for t in trades:
+        k = str(keyfn(t))
+        g = groups.setdefault(k, {"key": k, "count": 0, "settled": 0,
+                                  "wins": 0, "net_pnl": 0.0})
+        g["count"] += 1
+        if t.get("outcome_result"):
+            g["settled"] += 1
+            pnl = t.get("pnl", 0.0) or 0.0
+            g["net_pnl"] += pnl
+            if pnl > 0:
+                g["wins"] += 1
+    out = []
+    for g in groups.values():
+        g["win_rate"] = round(g["wins"] / g["settled"], 3) if g["settled"] else None
+        g["net_pnl"] = round(g["net_pnl"], 3)
+        g["avg_pnl"] = round(g["net_pnl"] / g["settled"], 3) if g["settled"] else None
+        out.append(g)
+    return sorted(out, key=lambda g: g["key"])
+
+
+def _confidence_bucket(conf: float) -> str:
+    if conf is None:
+        return "n/a"
+    edges = [(0.9, "0.90-1.00"), (0.8, "0.80-0.90"), (0.7, "0.70-0.80"),
+             (0.6, "0.60-0.70")]
+    for lo, label in edges:
+        if conf >= lo:
+            return label
+    return "<0.60"
+
+
+def performance_breakdowns(trades: list[dict]) -> dict:
+    """Per-topic, per-confidence, and evidence-vs-none breakdowns.
+
+    Directly answers spec 十二's AI metrics: 不同主题市场的表现 /
+    不同置信度交易的表现 / 有证据交易和无证据交易的表现.
+    """
+    def had_evidence(t: dict) -> str:
+        import json as _json
+
+        try:
+            ev = _json.loads(t.get("payload") or "{}").get("evidence") or []
+        except (ValueError, TypeError):
+            ev = []
+        return "with evidence" if ev else "no evidence"
+
+    return {
+        "by_topic": _group_stats(trades, lambda t: t.get("topic") or "other"),
+        "by_confidence": _group_stats(
+            trades, lambda t: _confidence_bucket(t.get("confidence"))),
+        "by_evidence": _group_stats(trades, had_evidence),
+    }
+
+
 @dataclass
 class EngineeringMetrics:
     api_errors: int = 0
@@ -134,6 +196,7 @@ def render_final_report(
     calibration: list[dict],
     engineering: EngineeringMetrics,
     success_criteria: dict[str, bool],
+    breakdowns: dict | None = None,
 ) -> str:
     net = end_equity - start_equity
     ret = net / start_equity if start_equity else 0.0
@@ -169,6 +232,21 @@ def render_final_report(
                 f"    {b['range']}: n={b['count']:<3} "
                 f"pred={b['avg_pred']} actual={b['actual_freq']}"
             )
+    if breakdowns:
+        lines.append("")
+        lines.append("-- Breakdowns (分主题/置信度/证据) ------------------------")
+        for title, key in (("By topic", "by_topic"),
+                           ("By confidence", "by_confidence"),
+                           ("By evidence", "by_evidence")):
+            rows = breakdowns.get(key, [])
+            if not rows:
+                continue
+            lines.append(f"  {title}:")
+            for g in rows:
+                wr = "n/a" if g["win_rate"] is None else f"{g['win_rate']:.0%}"
+                lines.append(
+                    f"    {g['key']:<14} trades={g['count']:<2} settled={g['settled']:<2}"
+                    f" win={wr:<4} net=${g['net_pnl']:.2f}")
     lines += [
         "",
         "-- Engineering (工程指标) --------------------------------",

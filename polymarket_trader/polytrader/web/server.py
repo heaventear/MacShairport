@@ -29,6 +29,7 @@ from ..reporting import (
     brier_score,
     calibration_bins,
     compute_trade_metrics,
+    performance_breakdowns,
 )
 from ..storage import Storage
 
@@ -122,6 +123,7 @@ def build_summary(storage: Storage, cfg: Config) -> dict:
             "halt_level": halt_level,
             "days_recorded": len(daily),
         },
+        "breakdowns": performance_breakdowns(trades),
     }
 
 

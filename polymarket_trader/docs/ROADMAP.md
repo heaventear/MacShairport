@@ -24,41 +24,59 @@ live trading.**
 - [x] Read-only web monitoring dashboard over the ledger (`web/`): trades, AI
       predictions, orders, event log, risk state, strategy params, equity curve.
 
-## ⏳ Phase 3 — Execution & risk hardening (partially scaffolded)
+## ⏳ Phase 3 — Execution & risk hardening (framework complete)
 
 - [x] Order state machine (`orders/state_machine.py`).
 - [x] Cancellation + TTL expiry + one-click cancel-all.
 - [x] Balance / cash-buffer checks.
 - [x] Reconciliation hook + global pause / read-only modes.
-- [ ] **Three-way reconciliation** against Polymarket API *and* on-chain state
-      (currently local-vs-local in simulation). Requires authenticated reads.
-- [ ] Real-time monitoring/alerting sink (webhook/email) — hook exists via
-      `storage.log_event`; wire to an alerting channel.
-- [ ] API-key / private-key isolation service (KMS or hardware signer). **Keys
-      must never enter this process's memory unencrypted.**
+- [x] **Three-way reconciliation framework** (`reconcile.py`): a `Reconciler`
+      comparing the local ledger against N external `LedgerSource` views
+      (exchange + on-chain), with a `SimulatedExchangeSource` for now. Real
+      Polymarket-API and on-chain readers implement the same interface and drop
+      in — they need authenticated reads (a human/Phase-4 step).
+- [x] Real-time alerting sink (`alerts.py`): pluggable console / JSONL /
+      webhook sinks; the Risk Manager raises alerts on every circuit-breaker
+      escalation, mirrored into the event log.
+- [x] Key/private-key **isolation interface** (`security.py`): a `Signer`
+      abstraction whose default (`NoSigner`) fails closed, plus an
+      `ExternalSigner` boundary to an out-of-process KMS/hardware signer.
+      **Keys never enter this process.** Connecting a real signer is a
+      Phase-4 step.
 
 ## ⛔ Phase 4 — Small live trading (NOT started; gated)
 
 Prerequisites before a single real order:
 
 1. `execution.mode` flipped to `live` **by a human**, plus a separate explicit
-   authorization flag.
+   authorization flag. `LiveExecutor` already enforces this — it enumerates the
+   unmet prerequisites and refuses.
 2. `LiveExecutor` implemented against `py-clob-client` with orders **signed by an
-   isolated signer**, not by this process.
+   isolated signer**, not by this process. The `Signer` interface and the
+   `ExternalSigner` boundary already exist (`security.py`); what remains is
+   wiring a real out-of-process signer and the order-signing/placement code.
 3. **pUSD / collateral handling**: USDT is only an on-ramp. A funding step must
    convert deposits to Polymarket's collateral asset and the Portfolio Manager
    must track collateral, not USDT. Do not treat USDT as the settlement asset.
-4. Geoblock compliance check that **fails closed** (原则 #7 — never bypass).
+4. Geoblock compliance check that **fails closed** — `check_geoblock`
+   (`security.py`) already does this (原则 #7 — never bypass). It must be fed a
+   real jurisdiction determination and a human compliance acknowledgement.
 5. Start at ~300 USDT, 10–20 USDT per trade; scale only after stability criteria
    (spec 十三) hold across the reconciliation and anomaly metrics.
+
+**Why this phase is not automated here:** every item above requires a human
+decision, real credentials/keys, or a legal/compliance judgement that an AI must
+not make on its own (原则 #4/#5/#7). The code deliberately stops at this line.
 
 ## Phase 5 — 7-day review
 
 - [x] Report scaffolding for profit / drawdown / AI accuracy / execution quality
       / fees & slippage / best & worst market types.
-- [ ] Per-topic and per-confidence breakdowns (data is captured in predictions/
-      trades; add the aggregation queries).
-- [ ] Decision gate for whether to build v2.
+- [x] Per-topic, per-confidence, and evidence-vs-none breakdowns
+      (`reporting.performance_breakdowns`), shown in the terminal report and on
+      the dashboard.
+- [ ] Decision gate for whether to build v2 (a human judgement call informed by
+      the metrics — intentionally not automated).
 
 ## Explicit non-goals for v1 (十四)
 

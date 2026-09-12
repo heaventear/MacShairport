@@ -109,23 +109,46 @@ class SimulationExecutor:
 
 
 class LiveExecutor:
-    """Placeholder for real CLOB execution — inert by design in this phase."""
+    """Placeholder for real CLOB execution — inert by design in this phase.
 
-    def __init__(self, cfg: Config):
+    The constructor makes the Phase-4 prerequisites explicit in code: live mode
+    must be set by a human, an isolated :class:`Signer` must be provided (the AI
+    never holds keys), and the geoblock check must pass (fail closed). Even with
+    all three, ``submit`` still raises here because order signing/placement is
+    intentionally unimplemented until that gated phase.
+    """
+
+    def __init__(self, cfg: Config, signer=None, geoblock_ok: bool = False):
+        from ..security import NoSigner
+
+        self.signer = signer if signer is not None else NoSigner()
+        self.geoblock_ok = geoblock_ok
+        self._blockers = self._unmet_prerequisites(cfg)
+
+    def _unmet_prerequisites(self, cfg: Config) -> list[str]:
+        from ..security import NoSigner
+
+        blockers = []
         if cfg.execution.mode != "live":
-            self._reason = "execution.mode is not 'live'"
-        else:
-            self._reason = "live execution not implemented in this phase"
+            blockers.append("execution.mode is not 'live' (human must set it)")
+        if isinstance(self.signer, NoSigner):
+            blockers.append("no isolated signer configured (keys stay out-of-band)")
+        if not self.geoblock_ok:
+            blockers.append("geoblock check has not passed (fail closed)")
+        blockers.append("order signing/placement not implemented in this phase")
+        return blockers
 
     def submit(self, order: Order, book: OrderBook) -> FillEvent:
         raise RuntimeError(
-            "LiveExecutor is disabled: "
-            f"{self._reason}. Real-money execution requires a future phase, "
-            "explicit human authorisation, and out-of-band key management."
+            "LiveExecutor is disabled. Unmet prerequisites: "
+            + "; ".join(self._blockers)
         )
 
     def cancel(self, order: Order) -> bool:
-        raise RuntimeError("LiveExecutor is disabled.")
+        raise RuntimeError(
+            "LiveExecutor is disabled. Unmet prerequisites: "
+            + "; ".join(self._blockers)
+        )
 
 
 # --------------------------------------------------------------------------- #

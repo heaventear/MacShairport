@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS trades (
     ai_probability REAL, market_price_at_decision REAL, fill_price REAL,
     size REAL, filled_size REAL, fee REAL, slippage REAL,
     created_ts REAL, filled_ts REAL, reason TEXT, risk_check TEXT,
+    confidence REAL, topic TEXT,
     outcome_result TEXT, pnl REAL, anomalous INTEGER, payload TEXT
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -115,14 +116,15 @@ class Storage:
             "INSERT OR REPLACE INTO trades (trade_id, order_id, market_id, question,"
             " outcome, side, ai_probability, market_price_at_decision, fill_price,"
             " size, filled_size, fee, slippage, created_ts, filled_ts, reason,"
-            " risk_check, outcome_result, pnl, anomalous, payload)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " risk_check, confidence, topic, outcome_result, pnl, anomalous, payload)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 t.trade_id, t.order_id, t.market_id, t.question, t.outcome.value,
                 t.side.value, t.ai_probability, t.market_price_at_decision,
                 t.fill_price, t.size, t.filled_size, t.fee, t.slippage,
                 t.created_ts, t.filled_ts, t.reason, t.risk_check,
-                t.outcome_result, t.pnl, int(t.anomalous), json.dumps(_ser(t)),
+                t.confidence, t.topic, t.outcome_result, t.pnl,
+                int(t.anomalous), json.dumps(_ser(t)),
             ),
         )
         self.conn.commit()
