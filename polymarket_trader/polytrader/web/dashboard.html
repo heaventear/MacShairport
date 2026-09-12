@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polymarket Trader — Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --border: #e3e6ea;
+    --text: #1a1d21; --muted: #6b7280; --accent: #3b5bdb; --accent-soft: #e7ecff;
+    --pos: #2f9e44; --neg: #e03131; --warn: #f08c00; --grid: #eceef1;
+    --chip: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1116; --panel: #161b22; --panel-2: #1c222b; --border: #2a313c;
+      --text: #e6edf3; --muted: #8b949e; --accent: #6b8afd; --accent-soft: #1d2740;
+      --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --grid: #232a34;
+      --chip: #222833;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); }
+  header { position: sticky; top: 0; z-index: 10; background: var(--panel);
+    border-bottom: 1px solid var(--border); padding: 14px 20px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .badge { font-size: 11px; color: var(--muted); }
+  .grow { flex: 1; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px; padding-block: 20px; }
+  button, select { font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; }
+  .card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin-bottom: 6px; }
+  .card .value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); } .warn { color: var(--warn); }
+
+  .panel { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 12px; font-weight: 650; }
+
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button { border-radius: 999px; background: transparent; border: 1px solid transparent;
+    color: var(--muted); }
+  .tabs button.active { background: var(--accent-soft); color: var(--accent);
+    border-color: transparent; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border);
+    white-space: nowrap; font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .04em; position: sticky; top: 0; background: var(--panel); }
+  th:first-child, td:first-child { text-align: left; }
+  td.l, th.l { text-align: left; }
+  .tablescroll { overflow-x: auto; }
+  tbody tr:hover { background: var(--panel-2); }
+
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+    font-weight: 600; background: var(--chip); color: var(--muted); }
+  .chip.FILLED, .chip.WON, .chip.RUNNING, .chip.YES { background: rgba(47,158,68,.15); color: var(--pos); }
+  .chip.CANCELLED, .chip.LOST, .chip.NO, .chip.FAILED { background: rgba(224,49,49,.15); color: var(--neg); }
+  .chip.PARTIALLY_FILLED, .chip.LIVE, .chip.NO_NEW_POSITIONS, .chip.READ_ONLY { background: rgba(240,140,0,.15); color: var(--warn); }
+  .chip.UNKNOWN, .chip.HARD_HALT { background: rgba(224,49,49,.2); color: var(--neg); }
+
+  .pred { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    margin-bottom: 12px; background: var(--panel); }
+  .pred .q { font-weight: 600; margin-bottom: 8px; }
+  .pred .row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px; font-size: 13px; }
+  .pred .metric { color: var(--muted); }
+  .pred .metric b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pred ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; }
+  .kv .item { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--border);
+    padding: 5px 0; font-size: 13px; }
+  .kv .item .k { color: var(--muted); }
+  .kv .item .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  svg text { fill: var(--muted); }
+  .err { color: var(--neg); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Polymarket Trader</h1>
+  <span class="badge" id="mode-badge">SIMULATION · read-only</span>
+  <span class="grow"></span>
+  <label class="switch"><input type="checkbox" id="auto"> auto-refresh</label>
+  <button id="refresh">Refresh</button>
+  <select id="theme" title="Theme">
+    <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
+  </select>
+</header>
+
+<div class="wrap">
+  <div id="error" class="err" hidden></div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="panel">
+    <h2>Equity curve</h2>
+    <div id="chart"></div>
+    <div class="note">Daily mark-to-market equity. A 7-day result is a systems test, not proof of long-term edge.</div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+</div>
+
+<script>
+"use strict";
+const $ = (s, r=document) => r.querySelector(s);
+const fmtMoney = v => (v==null ? "—" : "$" + Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
+const fmtPct = v => (v==null ? "—" : (Number(v)*100).toFixed(2) + "%");
+const fmtNum = (v,d=2) => (v==null ? "—" : Number(v).toFixed(d));
+const cls = v => (v==null||v===0) ? "" : (v>0 ? "pos" : "neg");
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const chip = (v) => `<span class="chip ${esc(v)}">${esc(v)}</span>`;
+
+const VALID_TABS = ["overview","trades","predictions","orders","events","strategy"];
+const initialTab = VALID_TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+const state = { tab: initialTab, data: {} };
+const TABS = [
+  ["overview","Overview"], ["trades","Trades"], ["predictions","AI Predictions"],
+  ["orders","Orders"], ["events","Event Log"], ["strategy","Strategy & Limits"],
+];
+
+async function getJSON(path){
+  const r = await fetch(path, {cache:"no-store"});
+  if(!r.ok){ const j = await r.json().catch(()=>({error:r.statusText})); throw new Error(j.error||("HTTP "+r.status)); }
+  return r.json();
+}
+
+async function loadAll(){
+  $("#error").hidden = true;
+  try {
+    const [summary, daily, trades, preds, orders, events, config, recon] = await Promise.all([
+      getJSON("/api/summary"), getJSON("/api/daily"), getJSON("/api/trades"),
+      getJSON("/api/predictions"), getJSON("/api/orders"), getJSON("/api/events"),
+      getJSON("/api/config"), getJSON("/api/reconciliations"),
+    ]);
+    state.data = {summary, daily, trades, preds, orders, events, config, recon};
+    if(config.execution) $("#mode-badge").textContent = config.execution.mode.toUpperCase() + " · read-only";
+    renderCards(); renderChart(); render();
+  } catch(e){
+    const el = $("#error"); el.hidden = false;
+    el.textContent = "Could not load ledger: " + e.message + " — run a simulation first (see README).";
+  }
+}
+
+function renderCards(){
+  const s = state.data.summary; if(!s) return;
+  const p = s.profit, t = s.trading, ai = s.ai, r = s.risk;
+  const cards = [
+    ["Equity", fmtMoney(p.end_equity), `start ${fmtMoney(p.start_equity)}`, ""],
+    ["Net PnL", fmtMoney(p.net_pnl), fmtPct(p.return_pct), cls(p.net_pnl)],
+    ["Max Drawdown", fmtPct(p.max_drawdown_pct), "peak-to-trough", "warn"],
+    ["Win Rate", t.win_rate==null?"—":fmtPct(t.win_rate), `${t.wins}W / ${t.losses}L · ${t.total_trades} trades`, ""],
+    ["Brier Score", ai.brier_score==null?"—":fmtNum(ai.brier_score,4), `${ai.scored_predictions} scored · 0.25=coin-flip`, ""],
+    ["Risk State", `<span style="font-size:16px">${chip(r.halt_level)}</span>`, `${r.days_recorded} days`, ""],
+    ["Fees + Slippage", fmtMoney((p.total_fees||0)+(p.slippage_cost||0)), `fees ${fmtMoney(p.total_fees)}`, ""],
+    ["Realized / Unreal.", fmtMoney(p.realized_pnl), `unreal. ${fmtMoney(p.unrealized_pnl)}`, cls(p.realized_pnl)],
+  ];
+  $("#cards").innerHTML = cards.map(([l,v,sub,c]) =>
+    `<div class="card"><div class="label">${l}</div><div class="value ${c}">${v}</div><div class="sub">${sub}</div></div>`).join("");
+}
+
+function renderChart(){
+  const d = state.data.daily || [];
+  const host = $("#chart");
+  if(d.length < 1){ host.innerHTML = '<div class="empty">No daily snapshots yet.</div>'; return; }
+  const W=1120, H=240, pad={l:56,r:16,t:14,b:26};
+  const xs = d.map(r=>r.day), ys = d.map(r=>r.equity);
+  const start = state.data.summary ? state.data.summary.profit.start_equity : ys[0];
+  const allY = ys.concat([start]);
+  let ymin = Math.min(...allY), ymax = Math.max(...allY);
+  const padY = (ymax-ymin)*0.15 || Math.max(1, ymax*0.01); ymin-=padY; ymax+=padY;
+  const xmin = Math.min(...xs), xmax = Math.max(...xs, xmin+1);
+  const px = x => pad.l + (x-xmin)/(xmax-xmin || 1)*(W-pad.l-pad.r);
+  const py = y => pad.t + (1-(y-ymin)/(ymax-ymin || 1))*(H-pad.t-pad.b);
+  const pts = d.map(r=>`${px(r.day).toFixed(1)},${py(r.equity).toFixed(1)}`).join(" ");
+  const up = ys[ys.length-1] >= start;
+  const color = up ? "var(--pos)" : "var(--neg)";
+  // gridlines + y labels
+  let grid = "", ticks = 4;
+  for(let i=0;i<=ticks;i++){ const y = ymin + (ymax-ymin)*i/ticks; const yy=py(y);
+    grid += `<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" stroke="var(--grid)"/>`;
+    grid += `<text x="${pad.l-8}" y="${yy+4}" text-anchor="end" font-size="11">${fmtMoney(y)}</text>`; }
+  // baseline (start equity)
+  const b = py(start);
+  const baseline = `<line x1="${pad.l}" y1="${b}" x2="${W-pad.r}" y2="${b}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".6"/>`;
+  const area = `${px(xmin)},${py(ymin)} ${pts} ${px(xmax)},${py(ymin)}`;
+  let xlabels = d.map(r=>`<text x="${px(r.day)}" y="${H-8}" text-anchor="middle" font-size="11">D${r.day}</text>`).join("");
+  const dots = d.map(r=>`<circle cx="${px(r.day)}" cy="${py(r.equity)}" r="3" fill="${color}"/>`).join("");
+  host.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Equity curve">
+      ${grid}${baseline}
+      <polygon points="${area}" fill="${color}" opacity="0.08"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>
+      ${dots}${xlabels}
+    </svg>`;
+}
+
+function renderTabs(){
+  $("#tabs").innerHTML = TABS.map(([id,label]) =>
+    `<button data-tab="${id}" class="${state.tab===id?'active':''}">${label}</button>`).join("");
+  $("#tabs").querySelectorAll("button").forEach(b =>
+    b.onclick = () => { state.tab = b.dataset.tab; location.hash = b.dataset.tab; renderTabs(); render(); });
+}
+
+function render(){
+  renderTabs();
+  const v = $("#view");
+  const d = state.data;
+  if(state.tab==="overview") return void (v.innerHTML = viewOverview(d));
+  if(state.tab==="trades") return void (v.innerHTML = viewTrades(d.trades));
+  if(state.tab==="predictions") return void (v.innerHTML = viewPredictions(d.preds));
+  if(state.tab==="orders") return void (v.innerHTML = viewOrders(d.orders));
+  if(state.tab==="events") return void (v.innerHTML = viewEvents(d.events));
+  if(state.tab==="strategy") return void (v.innerHTML = viewStrategy(d.config));
+}
+
+function tableOf(cols, rows, rowFn){
+  if(!rows || !rows.length) return `<div class="empty">No records yet.</div>`;
+  return `<div class="panel tablescroll"><table><thead><tr>${
+    cols.map(c=>`<th class="${c.l?'l':''}">${c.t}</th>`).join("")
+  }</tr></thead><tbody>${rows.map(rowFn).join("")}</tbody></table></div>`;
+}
+
+function viewOverview(d){
+  const s = d.summary; if(!s) return "";
+  const eng = s.engineering, ai = s.ai, t = s.trading;
+  const engRows = [
+    ["Selection rejections", eng.selection_rejections],
+    ["Edge rejections", eng.edge_rejections],
+    ["Risk rejections", eng.risk_rejections],
+    ["Duplicate orders suppressed", eng.duplicate_suppressed],
+    ["UNKNOWN order states", eng.unknown_orders],
+    ["Settlements", eng.settlements],
+    ["Maker ratio", t.maker_ratio==null?"—":fmtPct(t.maker_ratio)],
+    ["Anomalous trades", t.anomalous_trades],
+  ];
+  const calib = (ai.calibration||[]).filter(b=>b.count>0);
+  const calibRows = calib.length
+    ? calib.map(b=>`<div class="item"><span class="k">${b.range}</span><span class="v">pred ${fmtNum(b.avg_pred,2)} · actual ${fmtNum(b.actual_freq,2)} (n=${b.count})</span></div>`).join("")
+    : `<div class="empty">No settled predictions to score yet.</div>`;
+  const reconOK = (d.recon||[]).every(r=>r.consistent);
+  return `
+    <div class="panel"><h2>Risk & engineering integrity</h2>
+      <div class="kv">${engRows.map(([k,val])=>`<div class="item"><span class="k">${k}</span><span class="v">${val}</span></div>`).join("")}
+        <div class="item"><span class="k">Ledger reconciled</span><span class="v ${reconOK?'pos':'neg'}">${reconOK?'consistent':'MISMATCH'}</span></div>
+      </div>
+    </div>
+    <div class="panel"><h2>AI probability calibration</h2><div class="kv">${calibRows}</div>
+      <div class="note">Buckets predicted probability vs. how often those outcomes actually occurred.</div>
+    </div>`;
+}
+
+function viewTrades(rows){
+  const cols = [{t:"Market",l:1},{t:"Out"},{t:"Side"},{t:"AI p"},{t:"Price"},
+    {t:"Size"},{t:"Filled"},{t:"Fee"},{t:"Slip"},{t:"Result"},{t:"PnL"},{t:"⚠"}];
+  return tableOf(cols, rows, r => `<tr>
+    <td class="l" title="${esc(r.question)}">${esc((r.question||r.market_id||"").slice(0,42))}</td>
+    <td>${chip(r.outcome)}</td><td>${esc(r.side)}</td>
+    <td>${fmtNum(r.ai_probability,2)}</td><td>${fmtNum(r.fill_price,3)}</td>
+    <td>${fmtMoney(r.size)}</td><td>${fmtMoney(r.filled_size)}</td>
+    <td>${fmtNum(r.fee,3)}</td><td>${fmtNum(r.slippage,3)}</td>
+    <td>${r.outcome_result?chip(r.outcome_result):"—"}</td>
+    <td class="${cls(r.pnl)}">${r.pnl?fmtMoney(r.pnl):"—"}</td>
+    <td>${r.anomalous?'⚠':''}</td></tr>`);
+}
+
+function viewPredictions(rows){
+  if(!rows || !rows.length) return `<div class="empty">No AI predictions recorded yet.</div>`;
+  return rows.slice().reverse().map(r => {
+    let payload = {}; try { payload = JSON.parse(r.payload||"{}"); } catch(e){}
+    const ev = payload.evidence || [];
+    const inv = payload.invalidating_conditions || [];
+    return `<div class="pred">
+      <div class="q">${esc(r.question)} ${chip(r.selected_outcome)}</div>
+      <div class="row">
+        <span class="metric">AI prob <b>${fmtNum(r.estimated_probability,2)}</b></span>
+        <span class="metric">Market <b>${fmtNum(r.market_price,2)}</b></span>
+        <span class="metric">Edge <b class="${cls(r.estimated_edge)}">${fmtNum(r.estimated_edge,3)}</b></span>
+        <span class="metric">Confidence <b>${fmtNum(r.confidence,2)}</b></span>
+        <span class="metric">Horizon <b>${esc(payload.time_horizon||"—")}</b></span>
+        <span class="metric">Action <b>${esc(payload.recommended_action||"—")}</b> @ <b>${fmtNum(payload.recommended_price,2)}</b></span>
+      </div>
+      <div class="row" style="gap:32px">
+        <div><div class="metric">Evidence</div><ul>${ev.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
+        <div><div class="metric">Invalidating conditions</div><ul>${inv.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function viewOrders(rows){
+  const cols = [{t:"Order",l:1},{t:"Market",l:1},{t:"Out"},{t:"Type"},{t:"Limit"},
+    {t:"Size"},{t:"Filled"},{t:"Avg"},{t:"Fee"},{t:"Status"},{t:"Maker"}];
+  return tableOf(cols, rows, r => `<tr>
+    <td class="l">${esc((r.order_id||"").slice(0,12))}</td>
+    <td class="l">${esc((r.market_id||"").slice(0,20))}</td>
+    <td>${chip(r.outcome)}</td><td>${esc(r.order_type)}</td>
+    <td>${fmtNum(r.limit_price,3)}</td><td>${fmtMoney(r.size)}</td>
+    <td>${fmtMoney(r.filled_size)}</td><td>${fmtNum(r.avg_fill_price,3)}</td>
+    <td>${fmtNum(r.fee_paid,3)}</td><td>${chip(r.status)}</td>
+    <td>${r.is_maker?'✓':''}</td></tr>`);
+}
+
+function viewEvents(rows){
+  const cols = [{t:"Kind",l:1},{t:"Market",l:1},{t:"Detail",l:1}];
+  return tableOf(cols, rows, r => `<tr>
+    <td class="l">${chip(r.kind)}</td>
+    <td class="l">${esc(r.market_id||"—")}</td>
+    <td class="l">${esc(r.detail)}</td></tr>`);
+}
+
+function viewStrategy(cfg){
+  if(!cfg) return "";
+  const groups = [
+    ["Account", cfg.account], ["Strategy", cfg.strategy], ["Costs", cfg.costs],
+    ["Selection", cfg.selection], ["Position sizing", cfg.sizing],
+    ["Circuit breakers", cfg.circuit_breakers], ["Execution", cfg.execution],
+  ];
+  return groups.map(([title, obj]) => `<div class="panel"><h2>${title}</h2><div class="kv">${
+    Object.entries(obj||{}).map(([k,v])=>`<div class="item"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join("")
+  }</div></div>`).join("") +
+  `<div class="note">These parameters are loaded from an immutable config file. The AI engine cannot modify them.</div>`;
+}
+
+// theme + controls
+const themeSel = $("#theme");
+themeSel.value = localStorage.getItem("pt-theme") || "auto";
+function applyTheme(){ const t = themeSel.value;
+  if(t==="auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  localStorage.setItem("pt-theme", t); renderChart(); }
+themeSel.onchange = applyTheme; applyTheme();
+
+$("#refresh").onclick = loadAll;
+let timer = null;
+$("#auto").onchange = e => { clearInterval(timer); if(e.target.checked) timer = setInterval(loadAll, 5000); };
+window.addEventListener("resize", () => renderChart());
+loadAll();
+</script>
+</body>
+</html>

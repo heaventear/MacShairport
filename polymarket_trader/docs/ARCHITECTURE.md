@@ -107,6 +107,24 @@ Recovery is manual only (`manual_resume`), never automatic and never AI-driven.
 | Order status UNKNOWN                      | READ_ONLY (until reconciled) |
 | Security anomaly (key/signature)          | HARD_HALT |
 
+## Monitoring dashboard (`web/`)
+
+A read-only layer over the ledger, separate from the trading path:
+
+* `web/server.py` — stdlib `http.server`; serves the SPA and a small JSON API
+  (`/api/summary`, `/api/trades`, `/api/predictions`, `/api/orders`,
+  `/api/events`, `/api/daily`, `/api/reconciliations`, `/api/config`). A fresh
+  SQLite connection per request thread; every route is a GET that only reads.
+* `web/dashboard.html` — a self-contained single-page app (no CDN, theme-aware)
+  with KPI cards, an equity curve, and tabs for trades, AI predictions
+  (evidence + rationale), orders, the event log, and the strategy config.
+
+It is deliberately decoupled: the engine writes the ledger, the dashboard reads
+it. The dashboard can never place an order or change config, so exposing it
+carries no trading risk. Settlement results are written back onto fills as they
+happen (`storage.finalize_position_trades`), so win/loss and forecast scores are
+reproducible from the persisted ledger alone.
+
 ## Extending the system
 
 * **Real LLM forecaster**: implement `ai.ProbabilityEngine.predict` backed by an

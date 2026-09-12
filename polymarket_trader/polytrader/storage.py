@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS reconciliations (
     ts REAL, day INTEGER, kind TEXT, local_value REAL,
     external_value REAL, diff REAL, consistent INTEGER
 );
+CREATE TABLE IF NOT EXISTS daily_snapshots (
+    day INTEGER PRIMARY KEY,
+    ts REAL, equity REAL, cash REAL, realized_pnl REAL, unrealized_pnl REAL,
+    open_positions INTEGER, drawdown_pct REAL, halt_level TEXT
+);
 """
 
 
@@ -146,12 +151,66 @@ class Storage:
         self.conn.commit()
         return consistent
 
+    def finalize_position_trades(
+        self, market_id: str, outcome: str, result: str, realized_pnl: float
+    ) -> None:
+        """Write settlement results back onto the fills of a resolved/exited
+        position, pro-rating the position's realized PnL across its fills by
+        filled size. Makes win/loss and forecast scoring reproducible from the
+        persisted ledger alone."""
+        rows = list(self.conn.execute(
+            "SELECT trade_id, filled_size FROM trades WHERE market_id = ?"
+            " AND outcome = ?", (market_id, outcome),
+        ))
+        total = sum(r["filled_size"] or 0.0 for r in rows)
+        for r in rows:
+            share = ((r["filled_size"] or 0.0) / total) if total > 0 else 0.0
+            self.conn.execute(
+                "UPDATE trades SET outcome_result = ?, pnl = ? WHERE trade_id = ?",
+                (result, realized_pnl * share, r["trade_id"]),
+            )
+        self.conn.commit()
+
+    def record_daily_snapshot(
+        self, day: int, equity: float, cash: float, realized: float,
+        unrealized: float, open_positions: int, drawdown_pct: float,
+        halt_level: str,
+    ) -> None:
+        import time
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO daily_snapshots (day, ts, equity, cash,"
+            " realized_pnl, unrealized_pnl, open_positions, drawdown_pct,"
+            " halt_level) VALUES (?,?,?,?,?,?,?,?,?)",
+            (day, time.time(), equity, cash, realized, unrealized,
+             open_positions, drawdown_pct, halt_level),
+        )
+        self.conn.commit()
+
     # -- reads -------------------------------------------------------------- #
     def all_trades(self) -> list[dict]:
-        return [dict(r) for r in self.conn.execute("SELECT * FROM trades")]
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM trades ORDER BY created_ts")]
 
     def all_orders(self) -> list[dict]:
-        return [dict(r) for r in self.conn.execute("SELECT * FROM orders")]
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM orders ORDER BY created_ts")]
+
+    def all_predictions(self) -> list[dict]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM predictions ORDER BY ts")]
+
+    def all_events(self, limit: int = 500) -> list[dict]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))]
+
+    def all_reconciliations(self) -> list[dict]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM reconciliations ORDER BY id")]
+
+    def all_daily_snapshots(self) -> list[dict]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM daily_snapshots ORDER BY day")]
 
     def count(self, table: str) -> int:
         # table name is internal, never user-supplied.

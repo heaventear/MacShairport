@@ -21,6 +21,8 @@ live trading.**
 - [x] Simulated positions & PnL (`portfolio.py`).
 - [x] Risk-limit enforcement + circuit breakers (`risk.py`).
 - [x] Daily + 7-day reports incl. Brier / calibration (`reporting.py`).
+- [x] Read-only web monitoring dashboard over the ledger (`web/`): trades, AI
+      predictions, orders, event log, risk state, strategy params, equity curve.
 
 ## ⏳ Phase 3 — Execution & risk hardening (partially scaffolded)
 

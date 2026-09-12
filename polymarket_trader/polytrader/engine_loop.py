@@ -135,7 +135,7 @@ class SimulationEngine:
         from .selector import MarketSelector
 
         selector = MarketSelector(self.cfg, self.data)
-        candidates = selector.select(markets)
+        candidates = selector.select(markets, now=self.now)
         for rej in selector.last_rejections:
             self.storage.log_event("selection_reject", rej.reason, rej.market_id)
 
@@ -264,6 +264,9 @@ class SimulationEngine:
         yes_won = self.true_outcome.get(mid, False)
         won = yes_won if outcome is Outcome.YES else (not yes_won)
         pnl = self.portfolio.settle(mid, outcome, won)
+        self.storage.finalize_position_trades(
+            mid, outcome.value, "WON" if won else "LOST", pnl
+        )
         self.storage.log_event(
             "settlement", f"{outcome.value} won={won} pnl={pnl:.2f}", mid
         )
@@ -281,8 +284,11 @@ class SimulationEngine:
             if book and book.best_bid:
                 # Exit at the bid (sell to close before resolution).
                 fee = self.cfg.costs.taker_fee_rate * pos.shares * book.best_bid
-                self.portfolio.apply_sell_to_close(
+                pnl = self.portfolio.apply_sell_to_close(
                     mid, outcome, book.best_bid, pos.shares, fee
+                )
+                self.storage.finalize_position_trades(
+                    mid, outcome.value, "EXITED", pnl
                 )
                 self.storage.log_event("exit", f"closed at {book.best_bid:.3f}", mid)
             else:
@@ -300,6 +306,8 @@ class SimulationEngine:
         self.risk.on_reconciliation(consistent, "cash")
 
     def _print_daily(self, day, equity, marks, markets_by_id) -> None:
+        drawdown = (self.risk.peak_equity - equity) / self.risk.peak_equity \
+            if self.risk.peak_equity else 0.0
         report = DailyReport(
             day=day,
             equity=equity,
@@ -307,9 +315,16 @@ class SimulationEngine:
             realized_pnl=self.portfolio.realized_pnl,
             unrealized_pnl=self.portfolio.unrealized_pnl(marks),
             open_positions=len(self.portfolio.open_positions()),
-            drawdown_pct=(self.risk.peak_equity - equity) / self.risk.peak_equity
-            if self.risk.peak_equity else 0.0,
+            drawdown_pct=drawdown,
             halt_level=self.risk.halt_level.value,
+        )
+        # Persist the daily snapshot so the dashboard can plot the equity curve.
+        self.storage.record_daily_snapshot(
+            day=day, equity=equity, cash=self.portfolio.cash,
+            realized=self.portfolio.realized_pnl,
+            unrealized=self.portfolio.unrealized_pnl(marks),
+            open_positions=len(self.portfolio.open_positions()),
+            drawdown_pct=drawdown, halt_level=self.risk.halt_level.value,
         )
         self._log(report.render())
 
@@ -328,22 +343,10 @@ class SimulationEngine:
                 self.prediction_outcomes.append(
                     PredictionOutcome(prob, 1 if won else 0, conf, had_ev)
                 )
+        # Settlement/exit results were written back to the ledger as they
+        # happened (finalize_position_trades), so the persisted trades are the
+        # single source of truth for both the report and the dashboard.
         trades = self.storage.all_trades()
-        # Total filled notional per settled position, to pro-rate PnL across the
-        # position's child fills (otherwise each fill double-counts full PnL).
-        filled_by_pos: dict[tuple[str, Outcome], float] = {}
-        for t in trades:
-            key = (t["market_id"], Outcome(t["outcome"]))
-            filled_by_pos[key] = filled_by_pos.get(key, 0.0) + t.get("filled_size", 0.0)
-        # Fill settlement results into trade metrics from pnl on settled positions.
-        for t in trades:
-            key = (t["market_id"], Outcome(t["outcome"]))
-            pos = self.portfolio.positions.get(key)
-            if pos and pos.resolved:
-                t["outcome_result"] = "WON" if pos.resolution_value else "LOST"
-                total = filled_by_pos.get(key, 0.0)
-                share = (t.get("filled_size", 0.0) / total) if total > 0 else 0.0
-                t["pnl"] = pos.realized_pnl * share
         tm = compute_trade_metrics(trades)
         maker = sum(1 for o in self.storage.all_orders() if o.get("is_maker"))
         total_orders = max(1, self.storage.count("orders"))

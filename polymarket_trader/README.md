@@ -66,6 +66,39 @@ python3 -m pytest tests -q      # or: python3 -m unittest discover -s tests
 The run writes a SQLite ledger (`polytrader.db` by default) and prints a daily
 report plus a final 7-day experiment report (收益/交易/AI/工程 metrics).
 
+### Monitoring dashboard (web UI)
+
+The system ships with a **read-only web dashboard** so you can inspect trades,
+AI predictions (with evidence and rationale), orders, the event log, risk
+state, and the strategy parameters — not just run the engine. It reads the
+SQLite ledger live and, like everything else here, needs **no third-party
+packages** (it uses the stdlib `http.server`).
+
+```bash
+# 1) produce a ledger by running a simulation to a file DB
+python3 -m polytrader.scripts.run_simulation --days 7 --offline --db polytrader.db
+
+# 2) open the dashboard in your browser
+python3 -m polytrader.scripts.serve_dashboard --db polytrader.db --port 8000
+#    -> http://127.0.0.1:8000
+```
+
+The dashboard is strictly read-only: every endpoint is a GET that only reads
+the ledger. It never places orders, never mutates state, and serves no secrets.
+
+| Tab | Shows |
+|-----|-------|
+| Overview | KPI cards (equity, PnL, drawdown, win rate, Brier), equity curve, risk & engineering integrity, AI calibration |
+| Trades | Every fill: market, outcome, AI probability, price, fee, slippage, result, PnL |
+| AI Predictions | Structured forecasts with evidence, invalidating conditions, recommended action |
+| Orders | Order lifecycle with status badges |
+| Event Log | Selection/edge/risk rejections, settlements, duplicates, wind-down |
+| Strategy & Limits | The immutable config (risk params, sizing caps, circuit breakers) |
+
+JSON API (for your own tooling): `/api/summary`, `/api/daily`, `/api/trades`,
+`/api/predictions`, `/api/orders`, `/api/events`, `/api/reconciliations`,
+`/api/config`.
+
 ## Module map (系统模块设计)
 
 | Spec module            | Code                                   |
@@ -78,6 +111,7 @@ report plus a final 7-day experiment report (收益/交易/AI/工程 metrics).
 | Order Manager          | `polytrader/orders/`                    |
 | Portfolio Manager      | `polytrader/portfolio.py`               |
 | Monitoring & Reporting | `polytrader/reporting.py`               |
+| Monitoring dashboard   | `polytrader/web/` (server + SPA)        |
 | Orchestrator           | `polytrader/engine_loop.py`             |
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and

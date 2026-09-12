@@ -39,13 +39,17 @@ class MarketSelector:
         self.data = data
         self.last_rejections: list[Rejection] = []
 
-    def select(self, markets: list[Market]) -> list[Candidate]:
+    def select(self, markets: list[Market], now: float | None = None) -> list[Candidate]:
+        """Select tradeable candidates. ``now`` is the evaluation clock used for
+        resolution-horizon checks — callers running a simulated clock (the
+        engine) must pass it so time-based filters advance with the simulation
+        rather than tracking wall-clock time."""
         sel = self.cfg.selection
         candidates: list[Candidate] = []
         self.last_rejections = []
 
         for m in markets:
-            reason = self._reject_reason(m)
+            reason = self._reject_reason(m, now)
             if reason is not None:
                 self.last_rejections.append(Rejection(m.market_id, m.question, reason))
                 continue
@@ -88,7 +92,7 @@ class MarketSelector:
             )
         return candidates
 
-    def _reject_reason(self, m: Market) -> str | None:
+    def _reject_reason(self, m: Market, now: float | None = None) -> str | None:
         sel = self.cfg.selection
         if not m.active or not m.accepting_orders:
             return "market inactive / not accepting orders"
@@ -101,7 +105,7 @@ class MarketSelector:
         src = m.resolution_source.lower()
         if not src or any(h in src for h in _UNCLEAR_SOURCE_HINTS):
             return f"unclear/authoritative-less resolution source: {m.resolution_source!r}"
-        dtr = m.days_to_resolution()
+        dtr = m.days_to_resolution(now)
         if dtr is None:
             return "no resolution time"
         if dtr < 0:
