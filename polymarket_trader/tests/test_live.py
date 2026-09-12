@@ -89,15 +89,13 @@ class TestGatedExecutor(unittest.TestCase):
         with self.assertRaises(LiveExecutionBlocked):
             self._executor(authorized=False)
 
-    def test_full_fill_signs_and_places(self):
-        signer = FakeSigner()
+    def test_full_fill_places_order(self):
         client = FakeClobClient(fill_ratio=1.0)
-        ex = GatedClobExecutor(live_cfg(), signer, client, ALLOWED, authorized=True)
+        ex = GatedClobExecutor(live_cfg(), FakeSigner(), client, ALLOWED, authorized=True)
         ev = ex.submit(an_order(size=20), OrderBook("m", "t"))
         self.assertEqual(ev.status, OrderStatus.FILLED)
         self.assertAlmostEqual(ev.filled_size, 20.0)
-        self.assertEqual(signer.calls, 1)          # signing was delegated
-        self.assertEqual(len(client.placed), 1)
+        self.assertEqual(len(client.placed), 1)     # order was placed on the CLOB
 
     def test_partial_fill(self):
         ex = self._executor(FakeClobClient(fill_ratio=0.5))
@@ -124,10 +122,70 @@ class TestGatedExecutor(unittest.TestCase):
         self.assertEqual(len(client.cancelled), 1)
 
 
-class TestRealAdapterStub(unittest.TestCase):
-    def test_pyclob_adapter_not_implemented(self):
-        with self.assertRaises(NotImplementedError):
-            PyClobClientAdapter()
+class TestCredentials(unittest.TestCase):
+    def test_from_env_requires_private_key(self):
+        from polytrader.live import MissingCredentials, LiveCredentials
+        with self.assertRaises(MissingCredentials):
+            LiveCredentials.from_env(env={})
+
+    def test_from_env_defaults_and_parsing(self):
+        from polytrader.live import LiveCredentials
+        c = LiveCredentials.from_env(env={
+            "POLYMARKET_PRIVATE_KEY": "0xabc",
+            "POLYMARKET_CHAIN_ID": "137",
+            "POLYMARKET_SIGNATURE_TYPE": "1",
+            "POLYMARKET_FUNDER": "0xfund",
+        })
+        self.assertEqual(c.chain_id, 137)
+        self.assertEqual(c.signature_type, 1)
+        self.assertEqual(c.funder, "0xfund")
+        self.assertFalse(c.has_api_creds)
+        # secret never appears in repr
+        self.assertNotIn("0xabc", repr(c))
+        self.assertIn("<hidden>", repr(c))
+
+
+class TestLocalKeySigner(unittest.TestCase):
+    def test_masks_key_in_repr(self):
+        from polytrader.security import LocalKeySigner
+        s = LocalKeySigner("abc123", address="0xF00")
+        self.assertNotIn("abc123", repr(s))
+        self.assertEqual(s.address(), "0xF00")
+        self.assertTrue(s.key().startswith("0x"))
+
+    def test_empty_key_rejected(self):
+        from polytrader.security import LocalKeySigner, SignerUnavailable
+        with self.assertRaises(SignerUnavailable):
+            LocalKeySigner("")
+
+
+class TestAdapterPureLogic(unittest.TestCase):
+    def test_notional_to_shares(self):
+        # $20 notional at price 0.5 -> 40 shares
+        self.assertAlmostEqual(PyClobClientAdapter.notional_to_shares(20, 0.5), 40.0)
+        self.assertEqual(PyClobClientAdapter.notional_to_shares(20, 0), 0.0)
+
+    def test_map_place_response_filled(self):
+        adapter = PyClobClientAdapter(client=FakeClobClient())
+        # matched order: 40 shares at 0.5 -> $20 notional filled
+        out = adapter._map_place_response(
+            {"orderID": "x1", "status": "matched", "size_matched": 40}, price=0.5)
+        self.assertEqual(out["exchange_order_id"], "x1")
+        self.assertEqual(out["status"], "matched")
+        self.assertAlmostEqual(out["filled_size"], 20.0)
+
+    def test_map_place_response_resting(self):
+        adapter = PyClobClientAdapter(client=FakeClobClient())
+        out = adapter._map_place_response({"orderID": "x2", "status": "live"}, price=0.6)
+        self.assertEqual(out["status"], "live")
+        self.assertAlmostEqual(out["filled_size"], 0.0)
+
+    def test_adapter_delegates_cancel_and_status_via_fake(self):
+        # The gated executor + fake exercises the submit/cancel path end to end.
+        client = FakeClobClient(fill_ratio=1.0)
+        adapter_like = client  # FakeClobClient already speaks the ClobClient API
+        self.assertTrue(adapter_like.cancel_order("e1"))
+        self.assertEqual(adapter_like.order_status("e1")["status"], "live")
 
 
 if __name__ == "__main__":

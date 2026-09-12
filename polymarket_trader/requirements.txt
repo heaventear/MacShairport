@@ -2,9 +2,11 @@
 # The packages below are OPTIONAL and only needed for the live-data / live-trade
 # paths (which remain disabled in this phase). Pin exact versions before use.
 
-# --- Live market data & (future) execution ---
+# --- Live market data & execution (Phase 4) ---
+# Install these ONLY when operating a real funded account (see docs/GO_LIVE.md):
+# py-clob-client>=0.19,<1      # Official Polymarket CLOB client (real execution)
+# eth-account>=0.11,<1         # local key -> address/signing (pulled in by the above)
 # requests>=2.31,<3            # HTTP client for Polymarket public APIs
-# py-clob-client>=0.19,<1      # Official Polymarket CLOB client (Phase 3+)
 
 # --- Development / testing ---
 # pytest>=8,<9                 # optional; stdlib unittest also works

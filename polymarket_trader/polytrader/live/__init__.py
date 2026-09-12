@@ -25,6 +25,7 @@ from .preflight import (
     live_preflight,
 )
 from .executor import ClobClient, FakeClobClient, GatedClobExecutor, PyClobClientAdapter
+from .credentials import LiveCredentials, MissingCredentials
 
 __all__ = [
     "Gate",
@@ -36,4 +37,6 @@ __all__ = [
     "FakeClobClient",
     "GatedClobExecutor",
     "PyClobClientAdapter",
+    "LiveCredentials",
+    "MissingCredentials",
 ]

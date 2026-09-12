@@ -15,8 +15,11 @@ A simulation-first, auditable AI trading system for Polymarket. It is currently
    call the Order Manager, Portfolio, Risk Manager, or hold config/keys.
 3. **Risk config is immutable.** `Config` is a frozen dataclass loaded from
    `config/settings.yaml`. Never hand a mutable reference to the AI.
-4. **Keys never enter this process.** Signing goes through `security.Signer`;
-   the default `NoSigner` fails closed. Do not add key material to the repo.
+4. **Keys never in the repo; the AI never touches them.** Signing goes through
+   `security.Signer` (default `NoSigner` fails closed). For live operation the
+   key is loaded from the environment at runtime into `LocalKeySigner` (masked
+   in logs) — used only by the execution/adapter layer, never the AI. Prefer an
+   out-of-process `ExternalSigner` for larger capital. Never commit key material.
 5. **`execution.mode` must be `simulation`.** The runner refuses otherwise.
    `LiveExecutor` is intentionally inert.
 6. **Fail closed.** `security.check_geoblock` and the circuit breakers only ever

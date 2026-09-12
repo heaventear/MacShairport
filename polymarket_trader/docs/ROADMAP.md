@@ -58,10 +58,14 @@ Prerequisites before a single real order:
 1. `execution.mode` flipped to `live` **by a human**, plus a separate explicit
    authorization flag. `LiveExecutor` already enforces this — it enumerates the
    unmet prerequisites and refuses.
-2. `LiveExecutor` implemented against `py-clob-client` with orders **signed by an
-   isolated signer**, not by this process. The `Signer` interface and the
-   `ExternalSigner` boundary already exist (`security.py`); what remains is
-   wiring a real out-of-process signer and the order-signing/placement code.
+2. Execution against `py-clob-client` — **implemented** (`live/executor.py`
+   `PyClobClientAdapter`, built from `LiveCredentials.from_env`). Orders are
+   signed by the wallet key held in a `LocalKeySigner` (loaded from env, masked
+   in logs; the AI never sees it). Operate a funded account with
+   `scripts/run_live.py` (`--check` read-only, `--place-test-order` for a single
+   tiny fill). Not yet done: real exchange/on-chain reconciliation, precise fill
+   accounting, and an autonomous scan→trade loop on a real clock. For larger
+   capital, move signing to an out-of-process `ExternalSigner`.
 3. **pUSD / collateral handling**: USDT is only an on-ramp. A funding step must
    convert deposits to Polymarket's collateral asset and the Portfolio Manager
    must track collateral, not USDT. Do not treat USDT as the settlement asset.

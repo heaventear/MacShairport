@@ -63,6 +63,51 @@ real exchange adapter must be wired. These are deliberate human steps.
 10. Scale up **only** after the stability criteria (spec 十三) hold across
     several sessions — and never because of a single profitable run.
 
+## Operating a funded account (this build)
+
+You fund a Polymarket wallet manually; the system operates it with credentials
+you provide **only through the environment** (never committed). Install the live
+deps first: `pip install py-clob-client`.
+
+Environment variables (`credentials.py`):
+
+```bash
+export POLYMARKET_PRIVATE_KEY=0x...        # funded wallet key (required)
+# optional:
+export POLYMARKET_FUNDER=0x...             # proxy/funder address, if using a
+export POLYMARKET_SIGNATURE_TYPE=1         #   Polymarket email/Magic proxy wallet
+export POLYMARKET_HOST=https://clob.polymarket.com
+export POLYMARKET_CHAIN_ID=137
+# API creds are derived from the key if you don't set these:
+export POLYMARKET_API_KEY=... POLYMARKET_API_SECRET=... POLYMARKET_API_PASSPHRASE=...
+# the two human gates:
+export POLYTRADER_LIVE_AUTHORIZED=1
+# and set execution.mode: live in config/settings.yaml
+```
+
+Then use the gated operator tool — it runs the preflight every time:
+
+```bash
+# 1) read-only: preflight + resolve address + read USDC balance. Places NO orders.
+python3 -m polytrader.scripts.run_live --check \
+    --jurisdiction GB --i-acknowledge-compliance
+
+# 2) validate execution with ONE tiny order (auto-cancels unless --keep):
+python3 -m polytrader.scripts.run_live --place-test-order \
+    --token <YES_TOKEN_ID> --price 0.40 --size 1 \
+    --jurisdiction GB --i-acknowledge-compliance
+```
+
+The private key is loaded into a `LocalKeySigner` in-process (masked in all
+logs). This is the pragmatic "operate my wallet" mode; for larger capital move
+to an out-of-process `ExternalSigner`. The AI/analysis layer never sees the key.
+
+**Not yet wired (do before unattended trading):** live reconciliation against
+the real exchange/on-chain balances (the daily reconcile still compares
+local-vs-local), precise fill/price accounting via `order_status`/trades, and an
+autonomous scan→trade loop on a real clock. Validate `--check` and a couple of
+`--place-test-order` fills first.
+
 ## Kill switches
 
 - `OrderManager.cancel_all()` — one-click cancel of all live orders.
