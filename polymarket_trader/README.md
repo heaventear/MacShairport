@@ -112,10 +112,15 @@ JSON API (for your own tooling): `/api/summary`, `/api/daily`, `/api/trades`,
 | Portfolio Manager      | `polytrader/portfolio.py`               |
 | Monitoring & Reporting | `polytrader/reporting.py`               |
 | Monitoring dashboard   | `polytrader/web/` (server + SPA)        |
+| Alerting               | `polytrader/alerts.py`                  |
+| Reconciliation         | `polytrader/reconcile.py`               |
+| Key isolation / geoblock | `polytrader/security.py`              |
+| Live framework (gated) | `polytrader/live/` (inert until enabled)|
 | Orchestrator           | `polytrader/engine_loop.py`             |
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
-[`docs/ROADMAP.md`](docs/ROADMAP.md) for details and the path to live trading.
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for details, and
+[`docs/GO_LIVE.md`](docs/GO_LIVE.md) for the (human-gated) path to live trading.
 
 ## Safety notes
 

@@ -44,7 +44,14 @@ live trading.**
       **Keys never enter this process.** Connecting a real signer is a
       Phase-4 step.
 
-## ⛔ Phase 4 — Small live trading (NOT started; gated)
+## ⛔ Phase 4 — Small live trading (framework built & tested; gated on humans)
+
+The live-execution *framework* now exists and is unit-tested (`polytrader/live/`):
+a `GatedClobExecutor` that runs a fail-closed `live_preflight` at construction
+and delegates signing to an isolated `Signer` and placement to a `ClobClient`
+(verified against a `FakeClobClient`). It **cannot trade**: the real adapter is a
+stub and every gate below must be satisfied by a human. See
+[`GO_LIVE.md`](GO_LIVE.md) for the runbook.
 
 Prerequisites before a single real order:
 
