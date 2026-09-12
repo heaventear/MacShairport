@@ -19,13 +19,20 @@
       --chip: #222833;
     }
   }
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c222b; --border: #2a313c;
+    --text: #e6edf3; --muted: #8b949e; --accent: #6b8afd; --accent-soft: #1d2740;
+    --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --grid: #232a34;
+    --chip: #222833;
+  }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    "PingFang SC", "Microsoft YaHei", sans-serif; }
   a { color: var(--accent); }
   header { position: sticky; top: 0; z-index: 10; background: var(--panel);
     border-bottom: 1px solid var(--border); padding: 14px 20px;
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
   header .badge { font-size: 11px; color: var(--muted); }
   .grow { flex: 1; }
@@ -70,7 +77,7 @@
     font-weight: 600; background: var(--chip); color: var(--muted); }
   .chip.FILLED, .chip.WON, .chip.RUNNING, .chip.YES { background: rgba(47,158,68,.15); color: var(--pos); }
   .chip.CANCELLED, .chip.LOST, .chip.NO, .chip.FAILED { background: rgba(224,49,49,.15); color: var(--neg); }
-  .chip.PARTIALLY_FILLED, .chip.LIVE, .chip.NO_NEW_POSITIONS, .chip.READ_ONLY { background: rgba(240,140,0,.15); color: var(--warn); }
+  .chip.PARTIALLY_FILLED, .chip.LIVE, .chip.EXITED, .chip.NO_NEW_POSITIONS, .chip.READ_ONLY { background: rgba(240,140,0,.15); color: var(--warn); }
   .chip.UNKNOWN, .chip.HARD_HALT { background: rgba(224,49,49,.2); color: var(--neg); }
 
   .pred { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
@@ -81,8 +88,8 @@
   .pred .metric b { color: var(--text); font-variant-numeric: tabular-nums; }
   .pred ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; }
-  .kv .item { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--border);
-    padding: 5px 0; font-size: 13px; }
+  .kv .item { display: flex; justify-content: space-between; gap: 12px;
+    border-bottom: 1px dotted var(--border); padding: 5px 0; font-size: 13px; }
   .kv .item .k { color: var(--muted); }
   .kv .item .v { font-variant-numeric: tabular-nums; font-weight: 600; }
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
@@ -94,12 +101,15 @@
 <body>
 <header>
   <h1>📊 Polymarket Trader</h1>
-  <span class="badge" id="mode-badge">SIMULATION · read-only</span>
+  <span class="badge" id="mode-badge"></span>
   <span class="grow"></span>
-  <label class="switch"><input type="checkbox" id="auto"> auto-refresh</label>
-  <button id="refresh">Refresh</button>
-  <select id="theme" title="Theme">
-    <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
+  <label class="switch"><input type="checkbox" id="auto"> <span id="auto-label"></span></label>
+  <button id="refresh"></button>
+  <select id="lang" title="Language / 语言">
+    <option value="en">EN</option><option value="zh">中文</option>
+  </select>
+  <select id="theme" title="Theme / 主题">
+    <option value="auto"></option><option value="light"></option><option value="dark"></option>
   </select>
 </header>
 
@@ -109,9 +119,9 @@
   <div class="cards" id="cards"></div>
 
   <div class="panel">
-    <h2>Equity curve</h2>
+    <h2 id="eq-title"></h2>
     <div id="chart"></div>
-    <div class="note">Daily mark-to-market equity. A 7-day result is a systems test, not proof of long-term edge.</div>
+    <div class="note" id="eq-note"></div>
   </div>
 
   <div class="tabs" id="tabs"></div>
@@ -120,6 +130,112 @@
 
 <script>
 "use strict";
+
+/* ----------------------------- i18n ---------------------------------- */
+const I18N = {
+  en: {
+    mode_ro: m => `${String(m).toUpperCase()} · read-only`,
+    auto_refresh: "auto-refresh", refresh: "Refresh",
+    theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark",
+    eq_title: "Equity curve",
+    eq_note: "Daily mark-to-market equity. A 7-day result is a systems test, not proof of long-term edge.",
+    chart_empty: "No daily snapshots yet.",
+    tab_overview: "Overview", tab_trades: "Trades", tab_predictions: "AI Predictions",
+    tab_orders: "Orders", tab_events: "Event Log", tab_strategy: "Strategy & Limits",
+    kpi_equity: "Equity", kpi_netpnl: "Net PnL", kpi_drawdown: "Max Drawdown",
+    kpi_winrate: "Win Rate", kpi_brier: "Brier Score", kpi_riskstate: "Risk State",
+    kpi_fees: "Fees + Slippage", kpi_realized: "Realized / Unreal.",
+    sub_start: x => `start ${x}`, sub_peak: "peak-to-trough",
+    sub_wl: (w,l,n) => `${w}W / ${l}L · ${n} trades`,
+    sub_brier: n => `${n} scored · 0.25=coin-flip`,
+    sub_days: n => `${n} days`, sub_fees: x => `fees ${x}`, sub_unreal: x => `unreal. ${x}`,
+    ov_integrity: "Risk & engineering integrity", ov_calibration: "AI probability calibration",
+    ov_calib_note: "Buckets predicted probability vs. how often those outcomes actually occurred.",
+    eng_selection: "Selection rejections", eng_edge: "Edge rejections", eng_risk: "Risk rejections",
+    eng_dupe: "Duplicate orders suppressed", eng_unknown: "UNKNOWN order states",
+    eng_settlements: "Settlements", eng_maker: "Maker ratio", eng_anomalous: "Anomalous trades",
+    eng_reconciled: "Ledger reconciled", val_consistent: "consistent", val_mismatch: "MISMATCH",
+    calib_cell: (p,a,n) => `pred ${p} · actual ${a} (n=${n})`,
+    calib_empty: "No settled predictions to score yet.",
+    bd_topic: "Performance by market topic", bd_confidence: "Performance by AI confidence",
+    bd_evidence: "Performance: evidence vs. none",
+    col_group: "Group", col_trades: "Trades", col_settled: "Settled", col_winrate: "Win rate",
+    col_netpnl: "Net PnL", col_avgpnl: "Avg PnL",
+    empty_records: "No records yet.", empty_bd: "No trades yet.",
+    empty_preds: "No AI predictions recorded yet.",
+    t_market: "Market", t_out: "Out", t_side: "Side", t_aip: "AI p", t_price: "Price",
+    t_size: "Size", t_filled: "Filled", t_fee: "Fee", t_slip: "Slip", t_result: "Result", t_pnl: "PnL",
+    o_order: "Order", o_type: "Type", o_limit: "Limit", o_avg: "Avg", o_status: "Status", o_maker: "Maker",
+    e_kind: "Kind", e_detail: "Detail",
+    p_aiprob: "AI prob", p_market: "Market", p_edge: "Edge", p_conf: "Confidence",
+    p_horizon: "Horizon", p_action: "Action", p_evidence: "Evidence",
+    p_invalidating: "Invalidating conditions",
+    strat_account: "Account", strat_strategy: "Strategy", strat_costs: "Costs",
+    strat_selection: "Selection", strat_sizing: "Position sizing",
+    strat_breakers: "Circuit breakers", strat_execution: "Execution",
+    strat_note: "These parameters are loaded from an immutable config file. The AI engine cannot read or modify them.",
+    err_load: m => `Could not load ledger: ${m} — run a simulation first (see README).`,
+  },
+  zh: {
+    mode_ro: m => `${m==='simulation'?'模拟':m==='live'?'实盘':m} · 只读`,
+    auto_refresh: "自动刷新", refresh: "刷新",
+    theme_auto: "自动", theme_light: "浅色", theme_dark: "深色",
+    eq_title: "资金曲线",
+    eq_note: "每日按市值计算的权益。七天结果仅为系统测试，不能证明长期收益能力。",
+    chart_empty: "暂无每日快照。",
+    tab_overview: "概览", tab_trades: "成交", tab_predictions: "AI 预测",
+    tab_orders: "订单", tab_events: "事件日志", tab_strategy: "策略与限额",
+    kpi_equity: "权益", kpi_netpnl: "净盈亏", kpi_drawdown: "最大回撤",
+    kpi_winrate: "胜率", kpi_brier: "Brier 分数", kpi_riskstate: "风控状态",
+    kpi_fees: "手续费 + 滑点", kpi_realized: "已实现 / 未实现",
+    sub_start: x => `初始 ${x}`, sub_peak: "峰值到谷值",
+    sub_wl: (w,l,n) => `${w}胜 / ${l}负 · ${n} 笔`,
+    sub_brier: n => `${n} 项评分 · 0.25=随机`,
+    sub_days: n => `${n} 天`, sub_fees: x => `手续费 ${x}`, sub_unreal: x => `未实现 ${x}`,
+    ov_integrity: "风控与工程完整性", ov_calibration: "AI 概率校准",
+    ov_calib_note: "将预测概率分桶，与这些结果的实际发生频率进行对比。",
+    eng_selection: "筛选拒绝", eng_edge: "优势不足拒绝", eng_risk: "风控拒绝",
+    eng_dupe: "重复订单拦截", eng_unknown: "UNKNOWN 订单状态",
+    eng_settlements: "结算次数", eng_maker: "Maker 比例", eng_anomalous: "异常成交",
+    eng_reconciled: "账本对账", val_consistent: "一致", val_mismatch: "不一致",
+    calib_cell: (p,a,n) => `预测 ${p} · 实际 ${a}（n=${n}）`,
+    calib_empty: "暂无已结算的预测可评分。",
+    bd_topic: "按市场主题的表现", bd_confidence: "按 AI 置信度的表现",
+    bd_evidence: "有证据 vs 无证据",
+    col_group: "分组", col_trades: "笔数", col_settled: "已结算", col_winrate: "胜率",
+    col_netpnl: "净盈亏", col_avgpnl: "平均盈亏",
+    empty_records: "暂无记录。", empty_bd: "暂无成交。",
+    empty_preds: "暂无 AI 预测记录。",
+    t_market: "市场", t_out: "选项", t_side: "买卖", t_aip: "AI 概率", t_price: "价格",
+    t_size: "金额", t_filled: "成交", t_fee: "费用", t_slip: "滑点", t_result: "结算", t_pnl: "盈亏",
+    o_order: "订单", o_type: "类型", o_limit: "限价", o_avg: "均价", o_status: "状态", o_maker: "Maker",
+    e_kind: "类型", e_detail: "详情",
+    p_aiprob: "AI 概率", p_market: "市场价", p_edge: "优势", p_conf: "置信度",
+    p_horizon: "周期", p_action: "建议", p_evidence: "证据",
+    p_invalidating: "失效条件",
+    strat_account: "账户", strat_strategy: "策略", strat_costs: "成本",
+    strat_selection: "市场筛选", strat_sizing: "仓位规模",
+    strat_breakers: "熔断规则", strat_execution: "执行",
+    strat_note: "这些参数从不可变的配置文件加载，AI 引擎无法读取或修改。",
+    err_load: m => `无法加载账本：${m} — 请先运行一次模拟（见 README）。`,
+  },
+};
+let lang = "en";
+const _qlang = new URLSearchParams(location.search).get("lang");
+if (_qlang === "zh" || _qlang === "en") {
+  lang = _qlang;
+} else {
+  try {
+    lang = localStorage.getItem("pt-lang")
+      || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en");
+  } catch(e) {}
+}
+function t(key, ...args){
+  const v = (I18N[lang] || I18N.en)[key];
+  return (typeof v === "function") ? v(...args) : (v == null ? key : v);
+}
+
+/* --------------------------- helpers --------------------------------- */
 const $ = (s, r=document) => r.querySelector(s);
 const fmtMoney = v => (v==null ? "—" : "$" + Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
 const fmtPct = v => (v==null ? "—" : (Number(v)*100).toFixed(2) + "%");
@@ -128,20 +244,18 @@ const cls = v => (v==null||v===0) ? "" : (v>0 ? "pos" : "neg");
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const chip = (v) => `<span class="chip ${esc(v)}">${esc(v)}</span>`;
 
-const VALID_TABS = ["overview","trades","predictions","orders","events","strategy"];
-const initialTab = VALID_TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
-const state = { tab: initialTab, data: {} };
-const TABS = [
-  ["overview","Overview"], ["trades","Trades"], ["predictions","AI Predictions"],
-  ["orders","Orders"], ["events","Event Log"], ["strategy","Strategy & Limits"],
-];
+const TAB_IDS = ["overview","trades","predictions","orders","events","strategy"];
+const TAB_KEY = {overview:"tab_overview",trades:"tab_trades",predictions:"tab_predictions",
+  orders:"tab_orders",events:"tab_events",strategy:"tab_strategy"};
+const initialTab = TAB_IDS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+const state = { tab: initialTab, data: {}, mode: "simulation" };
 
+/* --------------------------- data load ------------------------------- */
 async function getJSON(path){
   const r = await fetch(path, {cache:"no-store"});
   if(!r.ok){ const j = await r.json().catch(()=>({error:r.statusText})); throw new Error(j.error||("HTTP "+r.status)); }
   return r.json();
 }
-
 async function loadAll(){
   $("#error").hidden = true;
   try {
@@ -151,26 +265,39 @@ async function loadAll(){
       getJSON("/api/config"), getJSON("/api/reconciliations"),
     ]);
     state.data = {summary, daily, trades, preds, orders, events, config, recon};
-    if(config.execution) $("#mode-badge").textContent = config.execution.mode.toUpperCase() + " · read-only";
-    renderCards(); renderChart(); render();
+    state.mode = (config.execution && config.execution.mode) || "simulation";
+    renderChrome(); renderCards(); renderChart(); render();
   } catch(e){
     const el = $("#error"); el.hidden = false;
-    el.textContent = "Could not load ledger: " + e.message + " — run a simulation first (see README).";
+    el.textContent = t("err_load", e.message);
   }
 }
 
+/* ----------------------- static chrome (i18n) ------------------------ */
+function renderChrome(){
+  document.documentElement.lang = (lang === "zh") ? "zh-CN" : "en";
+  $("#mode-badge").textContent = t("mode_ro", state.mode);
+  $("#auto-label").textContent = t("auto_refresh");
+  $("#refresh").textContent = t("refresh");
+  $("#eq-title").textContent = t("eq_title");
+  $("#eq-note").textContent = t("eq_note");
+  const th = $("#theme").options;
+  th[0].textContent = t("theme_auto"); th[1].textContent = t("theme_light"); th[2].textContent = t("theme_dark");
+}
+
+/* ------------------------------ views -------------------------------- */
 function renderCards(){
   const s = state.data.summary; if(!s) return;
-  const p = s.profit, t = s.trading, ai = s.ai, r = s.risk;
+  const p = s.profit, tr = s.trading, ai = s.ai, r = s.risk;
   const cards = [
-    ["Equity", fmtMoney(p.end_equity), `start ${fmtMoney(p.start_equity)}`, ""],
-    ["Net PnL", fmtMoney(p.net_pnl), fmtPct(p.return_pct), cls(p.net_pnl)],
-    ["Max Drawdown", fmtPct(p.max_drawdown_pct), "peak-to-trough", "warn"],
-    ["Win Rate", t.win_rate==null?"—":fmtPct(t.win_rate), `${t.wins}W / ${t.losses}L · ${t.total_trades} trades`, ""],
-    ["Brier Score", ai.brier_score==null?"—":fmtNum(ai.brier_score,4), `${ai.scored_predictions} scored · 0.25=coin-flip`, ""],
-    ["Risk State", `<span style="font-size:16px">${chip(r.halt_level)}</span>`, `${r.days_recorded} days`, ""],
-    ["Fees + Slippage", fmtMoney((p.total_fees||0)+(p.slippage_cost||0)), `fees ${fmtMoney(p.total_fees)}`, ""],
-    ["Realized / Unreal.", fmtMoney(p.realized_pnl), `unreal. ${fmtMoney(p.unrealized_pnl)}`, cls(p.realized_pnl)],
+    [t("kpi_equity"), fmtMoney(p.end_equity), t("sub_start", fmtMoney(p.start_equity)), ""],
+    [t("kpi_netpnl"), fmtMoney(p.net_pnl), fmtPct(p.return_pct), cls(p.net_pnl)],
+    [t("kpi_drawdown"), fmtPct(p.max_drawdown_pct), t("sub_peak"), "warn"],
+    [t("kpi_winrate"), tr.win_rate==null?"—":fmtPct(tr.win_rate), t("sub_wl", tr.wins, tr.losses, tr.total_trades), ""],
+    [t("kpi_brier"), ai.brier_score==null?"—":fmtNum(ai.brier_score,4), t("sub_brier", ai.scored_predictions), ""],
+    [t("kpi_riskstate"), `<span style="font-size:16px">${chip(r.halt_level)}</span>`, t("sub_days", r.days_recorded), ""],
+    [t("kpi_fees"), fmtMoney((p.total_fees||0)+(p.slippage_cost||0)), t("sub_fees", fmtMoney(p.total_fees)), ""],
+    [t("kpi_realized"), fmtMoney(p.realized_pnl), t("sub_unreal", fmtMoney(p.unrealized_pnl)), cls(p.realized_pnl)],
   ];
   $("#cards").innerHTML = cards.map(([l,v,sub,c]) =>
     `<div class="card"><div class="label">${l}</div><div class="value ${c}">${v}</div><div class="sub">${sub}</div></div>`).join("");
@@ -179,7 +306,7 @@ function renderCards(){
 function renderChart(){
   const d = state.data.daily || [];
   const host = $("#chart");
-  if(d.length < 1){ host.innerHTML = '<div class="empty">No daily snapshots yet.</div>'; return; }
+  if(d.length < 1){ host.innerHTML = `<div class="empty">${t("chart_empty")}</div>`; return; }
   const W=1120, H=240, pad={l:56,r:16,t:14,b:26};
   const xs = d.map(r=>r.day), ys = d.map(r=>r.equity);
   const start = state.data.summary ? state.data.summary.profit.start_equity : ys[0];
@@ -192,19 +319,19 @@ function renderChart(){
   const pts = d.map(r=>`${px(r.day).toFixed(1)},${py(r.equity).toFixed(1)}`).join(" ");
   const up = ys[ys.length-1] >= start;
   const color = up ? "var(--pos)" : "var(--neg)";
-  // gridlines + y labels
+  const dayLabel = (lang === "zh") ? "第" : "D";
   let grid = "", ticks = 4;
   for(let i=0;i<=ticks;i++){ const y = ymin + (ymax-ymin)*i/ticks; const yy=py(y);
     grid += `<line x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}" stroke="var(--grid)"/>`;
     grid += `<text x="${pad.l-8}" y="${yy+4}" text-anchor="end" font-size="11">${fmtMoney(y)}</text>`; }
-  // baseline (start equity)
   const b = py(start);
   const baseline = `<line x1="${pad.l}" y1="${b}" x2="${W-pad.r}" y2="${b}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".6"/>`;
   const area = `${px(xmin)},${py(ymin)} ${pts} ${px(xmax)},${py(ymin)}`;
-  let xlabels = d.map(r=>`<text x="${px(r.day)}" y="${H-8}" text-anchor="middle" font-size="11">D${r.day}</text>`).join("");
+  const dtxt = d.map(r => (lang === "zh") ? `${dayLabel}${r.day}` : `D${r.day}`);
+  let xlabels = d.map((r,i)=>`<text x="${px(r.day)}" y="${H-8}" text-anchor="middle" font-size="11">${dtxt[i]}</text>`).join("");
   const dots = d.map(r=>`<circle cx="${px(r.day)}" cy="${py(r.equity)}" r="3" fill="${color}"/>`).join("");
   host.innerHTML =
-    `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Equity curve">
+    `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${t("eq_title")}">
       ${grid}${baseline}
       <polygon points="${area}" fill="${color}" opacity="0.08"/>
       <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>
@@ -213,16 +340,15 @@ function renderChart(){
 }
 
 function renderTabs(){
-  $("#tabs").innerHTML = TABS.map(([id,label]) =>
-    `<button data-tab="${id}" class="${state.tab===id?'active':''}">${label}</button>`).join("");
+  $("#tabs").innerHTML = TAB_IDS.map(id =>
+    `<button data-tab="${id}" class="${state.tab===id?'active':''}">${t(TAB_KEY[id])}</button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b =>
     b.onclick = () => { state.tab = b.dataset.tab; location.hash = b.dataset.tab; renderTabs(); render(); });
 }
 
 function render(){
   renderTabs();
-  const v = $("#view");
-  const d = state.data;
+  const v = $("#view"), d = state.data;
   if(state.tab==="overview") return void (v.innerHTML = viewOverview(d));
   if(state.tab==="trades") return void (v.innerHTML = viewTrades(d.trades));
   if(state.tab==="predictions") return void (v.innerHTML = viewPredictions(d.preds));
@@ -232,7 +358,7 @@ function render(){
 }
 
 function tableOf(cols, rows, rowFn){
-  if(!rows || !rows.length) return `<div class="empty">No records yet.</div>`;
+  if(!rows || !rows.length) return `<div class="empty">${t("empty_records")}</div>`;
   return `<div class="panel tablescroll"><table><thead><tr>${
     cols.map(c=>`<th class="${c.l?'l':''}">${c.t}</th>`).join("")
   }</tr></thead><tbody>${rows.map(rowFn).join("")}</tbody></table></div>`;
@@ -240,56 +366,56 @@ function tableOf(cols, rows, rowFn){
 
 function viewOverview(d){
   const s = d.summary; if(!s) return "";
-  const eng = s.engineering, ai = s.ai, t = s.trading;
+  const eng = s.engineering, ai = s.ai, tr = s.trading;
   const engRows = [
-    ["Selection rejections", eng.selection_rejections],
-    ["Edge rejections", eng.edge_rejections],
-    ["Risk rejections", eng.risk_rejections],
-    ["Duplicate orders suppressed", eng.duplicate_suppressed],
-    ["UNKNOWN order states", eng.unknown_orders],
-    ["Settlements", eng.settlements],
-    ["Maker ratio", t.maker_ratio==null?"—":fmtPct(t.maker_ratio)],
-    ["Anomalous trades", t.anomalous_trades],
+    [t("eng_selection"), eng.selection_rejections],
+    [t("eng_edge"), eng.edge_rejections],
+    [t("eng_risk"), eng.risk_rejections],
+    [t("eng_dupe"), eng.duplicate_suppressed],
+    [t("eng_unknown"), eng.unknown_orders],
+    [t("eng_settlements"), eng.settlements],
+    [t("eng_maker"), tr.maker_ratio==null?"—":fmtPct(tr.maker_ratio)],
+    [t("eng_anomalous"), tr.anomalous_trades],
   ];
   const calib = (ai.calibration||[]).filter(b=>b.count>0);
   const calibRows = calib.length
-    ? calib.map(b=>`<div class="item"><span class="k">${b.range}</span><span class="v">pred ${fmtNum(b.avg_pred,2)} · actual ${fmtNum(b.actual_freq,2)} (n=${b.count})</span></div>`).join("")
-    : `<div class="empty">No settled predictions to score yet.</div>`;
+    ? calib.map(b=>`<div class="item"><span class="k">${b.range}</span><span class="v">${t("calib_cell", fmtNum(b.avg_pred,2), fmtNum(b.actual_freq,2), b.count)}</span></div>`).join("")
+    : `<div class="empty">${t("calib_empty")}</div>`;
   const reconOK = (d.recon||[]).every(r=>r.consistent);
   return `
-    <div class="panel"><h2>Risk & engineering integrity</h2>
+    <div class="panel"><h2>${t("ov_integrity")}</h2>
       <div class="kv">${engRows.map(([k,val])=>`<div class="item"><span class="k">${k}</span><span class="v">${val}</span></div>`).join("")}
-        <div class="item"><span class="k">Ledger reconciled</span><span class="v ${reconOK?'pos':'neg'}">${reconOK?'consistent':'MISMATCH'}</span></div>
+        <div class="item"><span class="k">${t("eng_reconciled")}</span><span class="v ${reconOK?'pos':'neg'}">${reconOK?t("val_consistent"):t("val_mismatch")}</span></div>
       </div>
     </div>
-    <div class="panel"><h2>AI probability calibration</h2><div class="kv">${calibRows}</div>
-      <div class="note">Buckets predicted probability vs. how often those outcomes actually occurred.</div>
+    <div class="panel"><h2>${t("ov_calibration")}</h2><div class="kv">${calibRows}</div>
+      <div class="note">${t("ov_calib_note")}</div>
     </div>
     ${viewBreakdowns(s.breakdowns)}`;
 }
 
 function breakdownTable(title, rows){
-  if(!rows || !rows.length) return `<div class="panel"><h2>${title}</h2><div class="empty">No trades yet.</div></div>`;
+  if(!rows || !rows.length) return `<div class="panel"><h2>${title}</h2><div class="empty">${t("empty_bd")}</div></div>`;
   const body = rows.map(r => `<tr>
     <td class="l">${esc(r.key)}</td><td>${r.count}</td><td>${r.settled}</td>
     <td>${r.win_rate==null?"—":fmtPct(r.win_rate)}</td>
     <td class="${cls(r.net_pnl)}">${r.net_pnl?fmtMoney(r.net_pnl):"—"}</td>
     <td class="${cls(r.avg_pnl)}">${r.avg_pnl==null?"—":fmtMoney(r.avg_pnl)}</td></tr>`).join("");
   return `<div class="panel tablescroll"><h2>${title}</h2><table>
-    <thead><tr><th class="l">Group</th><th>Trades</th><th>Settled</th><th>Win rate</th><th>Net PnL</th><th>Avg PnL</th></tr></thead>
+    <thead><tr><th class="l">${t("col_group")}</th><th>${t("col_trades")}</th><th>${t("col_settled")}</th><th>${t("col_winrate")}</th><th>${t("col_netpnl")}</th><th>${t("col_avgpnl")}</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
 function viewBreakdowns(b){
   if(!b) return "";
-  return breakdownTable("Performance by market topic", b.by_topic)
-    + breakdownTable("Performance by AI confidence", b.by_confidence)
-    + breakdownTable("Performance: evidence vs. none", b.by_evidence);
+  return breakdownTable(t("bd_topic"), b.by_topic)
+    + breakdownTable(t("bd_confidence"), b.by_confidence)
+    + breakdownTable(t("bd_evidence"), b.by_evidence);
 }
 
 function viewTrades(rows){
-  const cols = [{t:"Market",l:1},{t:"Out"},{t:"Side"},{t:"AI p"},{t:"Price"},
-    {t:"Size"},{t:"Filled"},{t:"Fee"},{t:"Slip"},{t:"Result"},{t:"PnL"},{t:"⚠"}];
+  const cols = [{t:t("t_market"),l:1},{t:t("t_out")},{t:t("t_side")},{t:t("t_aip")},{t:t("t_price")},
+    {t:t("t_size")},{t:t("t_filled")},{t:t("t_fee")},{t:t("t_slip")},{t:t("t_result")},{t:t("t_pnl")},{t:"⚠"}];
   return tableOf(cols, rows, r => `<tr>
     <td class="l" title="${esc(r.question)}">${esc((r.question||r.market_id||"").slice(0,42))}</td>
     <td>${chip(r.outcome)}</td><td>${esc(r.side)}</td>
@@ -302,7 +428,7 @@ function viewTrades(rows){
 }
 
 function viewPredictions(rows){
-  if(!rows || !rows.length) return `<div class="empty">No AI predictions recorded yet.</div>`;
+  if(!rows || !rows.length) return `<div class="empty">${t("empty_preds")}</div>`;
   return rows.slice().reverse().map(r => {
     let payload = {}; try { payload = JSON.parse(r.payload||"{}"); } catch(e){}
     const ev = payload.evidence || [];
@@ -310,24 +436,24 @@ function viewPredictions(rows){
     return `<div class="pred">
       <div class="q">${esc(r.question)} ${chip(r.selected_outcome)}</div>
       <div class="row">
-        <span class="metric">AI prob <b>${fmtNum(r.estimated_probability,2)}</b></span>
-        <span class="metric">Market <b>${fmtNum(r.market_price,2)}</b></span>
-        <span class="metric">Edge <b class="${cls(r.estimated_edge)}">${fmtNum(r.estimated_edge,3)}</b></span>
-        <span class="metric">Confidence <b>${fmtNum(r.confidence,2)}</b></span>
-        <span class="metric">Horizon <b>${esc(payload.time_horizon||"—")}</b></span>
-        <span class="metric">Action <b>${esc(payload.recommended_action||"—")}</b> @ <b>${fmtNum(payload.recommended_price,2)}</b></span>
+        <span class="metric">${t("p_aiprob")} <b>${fmtNum(r.estimated_probability,2)}</b></span>
+        <span class="metric">${t("p_market")} <b>${fmtNum(r.market_price,2)}</b></span>
+        <span class="metric">${t("p_edge")} <b class="${cls(r.estimated_edge)}">${fmtNum(r.estimated_edge,3)}</b></span>
+        <span class="metric">${t("p_conf")} <b>${fmtNum(r.confidence,2)}</b></span>
+        <span class="metric">${t("p_horizon")} <b>${esc(payload.time_horizon||"—")}</b></span>
+        <span class="metric">${t("p_action")} <b>${esc(payload.recommended_action||"—")}</b> @ <b>${fmtNum(payload.recommended_price,2)}</b></span>
       </div>
       <div class="row" style="gap:32px">
-        <div><div class="metric">Evidence</div><ul>${ev.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
-        <div><div class="metric">Invalidating conditions</div><ul>${inv.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
+        <div><div class="metric">${t("p_evidence")}</div><ul>${ev.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
+        <div><div class="metric">${t("p_invalidating")}</div><ul>${inv.map(e=>`<li>${esc(e)}</li>`).join("")||"<li>—</li>"}</ul></div>
       </div>
     </div>`;
   }).join("");
 }
 
 function viewOrders(rows){
-  const cols = [{t:"Order",l:1},{t:"Market",l:1},{t:"Out"},{t:"Type"},{t:"Limit"},
-    {t:"Size"},{t:"Filled"},{t:"Avg"},{t:"Fee"},{t:"Status"},{t:"Maker"}];
+  const cols = [{t:t("o_order"),l:1},{t:t("t_market"),l:1},{t:t("t_out")},{t:t("o_type")},{t:t("o_limit")},
+    {t:t("t_size")},{t:t("t_filled")},{t:t("o_avg")},{t:t("t_fee")},{t:t("o_status")},{t:t("o_maker")}];
   return tableOf(cols, rows, r => `<tr>
     <td class="l">${esc((r.order_id||"").slice(0,12))}</td>
     <td class="l">${esc((r.market_id||"").slice(0,20))}</td>
@@ -339,7 +465,7 @@ function viewOrders(rows){
 }
 
 function viewEvents(rows){
-  const cols = [{t:"Kind",l:1},{t:"Market",l:1},{t:"Detail",l:1}];
+  const cols = [{t:t("e_kind"),l:1},{t:t("t_market"),l:1},{t:t("e_detail"),l:1}];
   return tableOf(cols, rows, r => `<tr>
     <td class="l">${chip(r.kind)}</td>
     <td class="l">${esc(r.market_id||"—")}</td>
@@ -349,29 +475,40 @@ function viewEvents(rows){
 function viewStrategy(cfg){
   if(!cfg) return "";
   const groups = [
-    ["Account", cfg.account], ["Strategy", cfg.strategy], ["Costs", cfg.costs],
-    ["Selection", cfg.selection], ["Position sizing", cfg.sizing],
-    ["Circuit breakers", cfg.circuit_breakers], ["Execution", cfg.execution],
+    [t("strat_account"), cfg.account], [t("strat_strategy"), cfg.strategy], [t("strat_costs"), cfg.costs],
+    [t("strat_selection"), cfg.selection], [t("strat_sizing"), cfg.sizing],
+    [t("strat_breakers"), cfg.circuit_breakers], [t("strat_execution"), cfg.execution],
   ];
   return groups.map(([title, obj]) => `<div class="panel"><h2>${title}</h2><div class="kv">${
     Object.entries(obj||{}).map(([k,v])=>`<div class="item"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join("")
   }</div></div>`).join("") +
-  `<div class="note">These parameters are loaded from an immutable config file. The AI engine cannot modify them.</div>`;
+  `<div class="note">${t("strat_note")}</div>`;
 }
 
-// theme + controls
+/* --------------------------- controls -------------------------------- */
 const themeSel = $("#theme");
-themeSel.value = localStorage.getItem("pt-theme") || "auto";
-function applyTheme(){ const t = themeSel.value;
-  if(t==="auto") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", t);
-  localStorage.setItem("pt-theme", t); renderChart(); }
+try { themeSel.value = localStorage.getItem("pt-theme") || "auto"; } catch(e) {}
+function applyTheme(){ const th = themeSel.value;
+  if(th==="auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", th);
+  try { localStorage.setItem("pt-theme", th); } catch(e) {}
+  renderChart(); }
 themeSel.onchange = applyTheme; applyTheme();
+
+const langSel = $("#lang");
+langSel.value = lang;
+langSel.onchange = () => {
+  lang = langSel.value;
+  try { localStorage.setItem("pt-lang", lang); } catch(e) {}
+  renderChrome(); renderCards(); renderChart(); render();
+};
 
 $("#refresh").onclick = loadAll;
 let timer = null;
 $("#auto").onchange = e => { clearInterval(timer); if(e.target.checked) timer = setInterval(loadAll, 5000); };
 window.addEventListener("resize", () => renderChart());
+
+renderChrome();
 loadAll();
 </script>
 </body>
