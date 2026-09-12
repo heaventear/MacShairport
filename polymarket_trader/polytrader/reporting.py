@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .i18n import tr
+
 
 @dataclass
 class PredictionOutcome:
@@ -169,16 +171,16 @@ class DailyReport:
     halt_level: str
     notes: list[str] = field(default_factory=list)
 
-    def render(self) -> str:
+    def render(self, lang: str = "en") -> str:
         lines = [
-            f"=== Day {self.day} Report ===",
-            f"  Equity:          ${self.equity:,.2f}",
-            f"  Cash:            ${self.cash:,.2f}",
-            f"  Realized PnL:    ${self.realized_pnl:,.2f}",
-            f"  Unrealized PnL:  ${self.unrealized_pnl:,.2f}",
-            f"  Open positions:  {self.open_positions}",
-            f"  Drawdown:        {self.drawdown_pct:.2%}",
-            f"  Risk state:      {self.halt_level}",
+            tr(lang, "day_report_title", day=self.day),
+            f"  {tr(lang, 'lbl_equity')}: ${self.equity:,.2f}",
+            f"  {tr(lang, 'lbl_cash')}: ${self.cash:,.2f}",
+            f"  {tr(lang, 'lbl_realized')}: ${self.realized_pnl:,.2f}",
+            f"  {tr(lang, 'lbl_unrealized')}: ${self.unrealized_pnl:,.2f}",
+            f"  {tr(lang, 'lbl_open_positions')}: {self.open_positions}",
+            f"  {tr(lang, 'lbl_drawdown')}: {self.drawdown_pct:.2%}",
+            f"  {tr(lang, 'lbl_risk_state')}: {self.halt_level}",
         ]
         for note in self.notes:
             lines.append(f"  - {note}")
@@ -197,34 +199,36 @@ def render_final_report(
     engineering: EngineeringMetrics,
     success_criteria: dict[str, bool],
     breakdowns: dict | None = None,
+    lang: str = "en",
 ) -> str:
     net = end_equity - start_equity
     ret = net / start_equity if start_equity else 0.0
+    passw, failw = tr(lang, "pass_word"), tr(lang, "fail_word")
     lines = [
         "",
         "############################################################",
-        f"#      {days}-Day Experiment Report (SIMULATION)",
+        f"#      {tr(lang, 'final_title', days=days)}",
         "############################################################",
         "",
-        "-- Profit (收益指标) ------------------------------------",
-        f"  Start equity:     ${start_equity:,.2f}",
-        f"  End equity:       ${end_equity:,.2f}",
-        f"  Net PnL:          ${net:,.2f} ({ret:+.2%})",
-        f"  Max drawdown:     {max_drawdown_pct:.2%}",
-        f"  Total fees:       ${trade_metrics.total_fees:,.4f}",
-        f"  Slippage cost:    ${trade_metrics.total_slippage_cost:,.4f}",
+        f"-- {tr(lang, 'sec_profit')} ------------------------------------",
+        f"  {tr(lang, 'p_start')}: ${start_equity:,.2f}",
+        f"  {tr(lang, 'p_end')}: ${end_equity:,.2f}",
+        f"  {tr(lang, 'p_net')}: ${net:,.2f} ({ret:+.2%})",
+        f"  {tr(lang, 'p_maxdd')}: {max_drawdown_pct:.2%}",
+        f"  {tr(lang, 'p_fees')}: ${trade_metrics.total_fees:,.4f}",
+        f"  {tr(lang, 'p_slip')}: ${trade_metrics.total_slippage_cost:,.4f}",
         "",
-        "-- Trading (交易指标) -----------------------------------",
-        f"  Total trades:     {trade_metrics.total_trades}",
-        f"  Win / Loss:       {trade_metrics.wins} / {trade_metrics.losses}",
-        f"  Win rate:         {_pct(trade_metrics.win_rate)}",
-        f"  Avg win / loss:   ${trade_metrics.avg_win:,.3f} / ${trade_metrics.avg_loss:,.3f}",
-        f"  Anomalous trades: {trade_metrics.anomalous_trades}",
+        f"-- {tr(lang, 'sec_trading')} -----------------------------------",
+        f"  {tr(lang, 'tr_total')}: {trade_metrics.total_trades}",
+        f"  {tr(lang, 'tr_wl')}: {trade_metrics.wins} / {trade_metrics.losses}",
+        f"  {tr(lang, 'tr_winrate')}: {_pct(trade_metrics.win_rate)}",
+        f"  {tr(lang, 'tr_avg')}: ${trade_metrics.avg_win:,.3f} / ${trade_metrics.avg_loss:,.3f}",
+        f"  {tr(lang, 'tr_anom')}: {trade_metrics.anomalous_trades}",
         "",
-        "-- AI quality (AI 指标) ---------------------------------",
-        f"  Brier score:      {brier if brier is None else round(brier, 4)}"
-        "   (0=perfect, 0.25=always-0.5)",
-        "  Calibration:",
+        f"-- {tr(lang, 'sec_ai')} ---------------------------------",
+        f"  {tr(lang, 'ai_brier')}: {brier if brier is None else round(brier, 4)}"
+        f"   {tr(lang, 'ai_brier_note')}",
+        f"  {tr(lang, 'ai_calib')}:",
     ]
     for b in calibration:
         if b["count"]:
@@ -234,41 +238,43 @@ def render_final_report(
             )
     if breakdowns:
         lines.append("")
-        lines.append("-- Breakdowns (分主题/置信度/证据) ------------------------")
-        for title, key in (("By topic", "by_topic"),
-                           ("By confidence", "by_confidence"),
-                           ("By evidence", "by_evidence")):
+        lines.append(f"-- {tr(lang, 'sec_breakdowns')} ------------------------")
+        for tkey, key in (("bd_topic", "by_topic"),
+                          ("bd_conf", "by_confidence"),
+                          ("bd_evidence", "by_evidence")):
             rows = breakdowns.get(key, [])
             if not rows:
                 continue
-            lines.append(f"  {title}:")
+            lines.append(f"  {tr(lang, tkey)}:")
             for g in rows:
                 wr = "n/a" if g["win_rate"] is None else f"{g['win_rate']:.0%}"
                 lines.append(
-                    f"    {g['key']:<14} trades={g['count']:<2} settled={g['settled']:<2}"
-                    f" win={wr:<4} net=${g['net_pnl']:.2f}")
+                    f"    {g['key']:<14} "
+                    + tr(lang, "bd_line", count=g["count"], settled=g["settled"],
+                         wr=wr, net=f"{g['net_pnl']:.2f}"))
     lines += [
         "",
-        "-- Engineering (工程指标) --------------------------------",
-        f"  API errors:            {engineering.api_errors}",
-        f"  Risk rejections:       {engineering.risk_rejections}",
-        f"  Duplicate suppressed:  {engineering.duplicate_suppressions}",
-        f"  UNKNOWN orders:        {engineering.unknown_orders}",
-        f"  Cancellations:         {engineering.cancellations}",
-        f"  System pauses:         {engineering.system_pauses}",
-        f"  Ledger reconciled:     {engineering.reconciliation_consistent}",
+        f"-- {tr(lang, 'sec_engineering')} --------------------------------",
+        f"  {tr(lang, 'eng_api')}: {engineering.api_errors}",
+        f"  {tr(lang, 'eng_risk')}: {engineering.risk_rejections}",
+        f"  {tr(lang, 'eng_dupe')}: {engineering.duplicate_suppressions}",
+        f"  {tr(lang, 'eng_unknown')}: {engineering.unknown_orders}",
+        f"  {tr(lang, 'eng_cancel')}: {engineering.cancellations}",
+        f"  {tr(lang, 'eng_pauses')}: {engineering.system_pauses}",
+        f"  {tr(lang, 'eng_reconciled')}: {engineering.reconciliation_consistent}",
         "",
-        "-- Success criteria (实验成功标准) -----------------------",
+        f"-- {tr(lang, 'sec_success')} -----------------------",
     ]
     for crit, ok in success_criteria.items():
-        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {crit}")
+        label = tr(lang, f"crit_{crit}")
+        lines.append(f"  [{passw if ok else failw}] {label}")
     overall = all(success_criteria.values())
     lines += [
         "",
-        f"  OVERALL: {'PASS' if overall else 'FAIL'}",
+        f"  {tr(lang, 'overall', result=passw if overall else failw)}",
         "",
-        "  NOTE: a 7-day simulation result does not prove long-term",
-        "  profitability (spec 十三/十四). Treat as a systems test only.",
+        f"  {tr(lang, 'closing1')}",
+        f"  {tr(lang, 'closing2')}",
         "############################################################",
     ]
     return "\n".join(lines)

@@ -20,6 +20,7 @@ from .ai import HeuristicProbabilityEngine, ProbabilityEngine
 from .alerts import AlertManager, ConsoleAlertSink
 from .config import Config, load_config
 from .edge import compute_edge
+from .i18n import normalize_lang
 from .market_data import MarketDataService, OfflineDataSource
 from .market_data.client import DataSource
 from .models import Outcome, Side
@@ -53,6 +54,7 @@ class SimulationEngine:
         seed: int = 123,
         verbose: bool = True,
         alerts: AlertManager | None = None,
+        lang: str = "en",
     ):
         self.cfg = cfg
         self.data = data
@@ -60,6 +62,7 @@ class SimulationEngine:
         self.storage = storage
         self.offline = offline_source
         self.verbose = verbose
+        self.lang = normalize_lang(lang)
         self.rng = random.Random(seed)
 
         investable = cfg.account.total_capital_usd
@@ -350,7 +353,7 @@ class SimulationEngine:
             open_positions=len(self.portfolio.open_positions()),
             drawdown_pct=drawdown, halt_level=self.risk.halt_level.value,
         )
-        self._log(report.render())
+        self._log(report.render(self.lang))
 
     # ------------------------------------------------------------------ #
     def _final_report(self, days, start_equity, markets_by_id) -> str:
@@ -394,25 +397,26 @@ class SimulationEngine:
             days=days, start_equity=start_equity, end_equity=end_equity,
             max_drawdown_pct=self.max_drawdown, trade_metrics=tm, brier=brier,
             calibration=calib, engineering=eng, success_criteria=success,
-            breakdowns=performance_breakdowns(trades),
+            breakdowns=performance_breakdowns(trades), lang=self.lang,
         )
         # The final report is the deliverable; the runner always prints it
         # (``--quiet`` only suppresses the per-day reports).
         return report
 
     def _success_criteria(self, tm, eng, brier) -> dict[str, bool]:
+        # Keys are stable ids; display labels come from i18n (crit_<id>).
         cb = self.cfg.circuit_breakers
         return {
-            "no drawdown-limit breach": self.max_drawdown < cb.drawdown_halt_pct,
-            "no duplicate orders": eng.duplicate_suppressions == 0
+            "no_drawdown_breach": self.max_drawdown < cb.drawdown_halt_pct,
+            "no_duplicate_orders": eng.duplicate_suppressions == 0
             or all(o.get("status") != "FILLED"
                    for o in self.storage.all_orders() if o.get("anomalous")),
-            "no unexplained anomalous fills": tm.anomalous_trades == 0,
-            "ledger reconciled": eng.reconciliation_consistent,
-            "all trades traceable": self.storage.count("trades") == len(
+            "no_anomalous_fills": tm.anomalous_trades == 0,
+            "ledger_reconciled": eng.reconciliation_consistent,
+            "all_traceable": self.storage.count("trades") == len(
                 [o for o in self.storage.all_orders() if o.get("filled_size", 0) > 0]
             ) or self.storage.count("trades") >= 0,
-            "risk manager active": self.risk_rejections >= 0,
+            "risk_active": self.risk_rejections >= 0,
         }
 
 
@@ -422,6 +426,7 @@ def build_offline_engine(
     storage_path: str = ":memory:",
     seed: int = 42,
     verbose: bool = True,
+    lang: str = "en",
 ) -> SimulationEngine:
     cfg = cfg or load_config()
     source = OfflineDataSource(seed=seed)
@@ -438,7 +443,8 @@ def build_offline_engine(
     )
     storage = Storage(storage_path)
     return SimulationEngine(
-        cfg, service, ai, storage, offline_source=source, seed=seed, verbose=verbose
+        cfg, service, ai, storage, offline_source=source, seed=seed,
+        verbose=verbose, lang=lang,
     )
 
 
@@ -446,6 +452,7 @@ def build_live_data_engine(
     cfg: Config | None = None,
     storage_path: str = "polytrader.db",
     verbose: bool = True,
+    lang: str = "en",
 ) -> SimulationEngine:
     """Paper-trade against live *read-only* Polymarket data. Still no orders and
     no settlement (real outcomes are unknown until resolution)."""
@@ -455,4 +462,5 @@ def build_live_data_engine(
     service = MarketDataService(LiveDataSource())
     ai = HeuristicProbabilityEngine(min_confidence=cfg.strategy.min_confidence)
     storage = Storage(storage_path)
-    return SimulationEngine(cfg, service, ai, storage, offline_source=None, verbose=verbose)
+    return SimulationEngine(cfg, service, ai, storage, offline_source=None,
+                            verbose=verbose, lang=lang)

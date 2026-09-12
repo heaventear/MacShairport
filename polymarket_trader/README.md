@@ -56,6 +56,9 @@ cd polymarket_trader
 # Run a 7-day paper-trading simulation against the bundled offline fixture
 python3 -m polytrader.scripts.run_simulation --days 7 --offline
 
+# Reports are bilingual — add --lang zh for a 中文 report (default: en)
+python3 -m polytrader.scripts.run_simulation --days 7 --offline --lang zh
+
 # Or run against live Polymarket public market data (read-only, still no orders)
 python3 -m polytrader.scripts.run_simulation --days 2 --live-data
 

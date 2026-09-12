@@ -16,6 +16,7 @@ import sys
 
 from ..config import load_config
 from ..engine_loop import build_live_data_engine, build_offline_engine
+from ..i18n import normalize_lang, tr
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,21 +31,23 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--live-data", action="store_true",
                       help="read live Polymarket public data (read-only)")
     parser.add_argument("--quiet", action="store_true", help="suppress daily reports")
+    parser.add_argument("--lang", default="en", choices=["en", "zh"],
+                        help="report language (en / zh)")
     args = parser.parse_args(argv)
+    lang = normalize_lang(args.lang)
 
     cfg = load_config(args.config)
     if cfg.execution.mode != "simulation":
-        print("REFUSING TO RUN: execution.mode must be 'simulation' in this phase.",
-              file=sys.stderr)
+        print(tr(lang, "refuse_sim"), file=sys.stderr)
         return 2
 
     if args.live_data:
-        print("Running against LIVE read-only Polymarket data (no orders placed).")
+        print(tr(lang, "run_live_notice"))
         engine = build_live_data_engine(cfg, storage_path=args.db,
-                                        verbose=not args.quiet)
+                                        verbose=not args.quiet, lang=lang)
     else:
         engine = build_offline_engine(cfg, storage_path=args.db, seed=args.seed,
-                                      verbose=not args.quiet)
+                                      verbose=not args.quiet, lang=lang)
 
     report = engine.run(days=args.days)
     print(report)
